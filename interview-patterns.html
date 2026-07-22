@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>面试回答挖空练习</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%23f4f1ea'/%3E%3Ctext x='50' y='50' text-anchor='middle' dominant-baseline='central' font-size='62'%3E%F0%9F%8E%A4%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#f4f1ea;
+    --card:#ffffff;
+    --ink:#2b2723;
+    --muted:#93887a;
+    --faint:#c3b8a6;
+    --line:#e7e1d5;
+    --line-strong:#dcd4c4;
+    /* 句型 = 金 (her signature accent) */
+    --pat-bg:#f6ead0;
+    --pat-ink:#8a6712;
+    --pat-line:#e2c98f;
+    /* 短语 = 石板蓝 (deliberate calm secondary) */
+    --phr-bg:#e5edf3;
+    --phr-ink:#3a5c7c;
+    --phr-line:#bcd0e0;
+    --sans:"IBM Plex Sans","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+    --serif:"IBM Plex Serif","PingFang SC","Microsoft YaHei",Georgia,serif;
+    --mono:"IBM Plex Mono","PingFang SC","Microsoft YaHei",ui-monospace,monospace;
+    --radius:14px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;}
+  body{
+    background:var(--bg);color:var(--ink);font-family:var(--sans);
+    font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased;
+  }
+  button{font-family:inherit;cursor:pointer;color:inherit;}
+  ::selection{background:#efe4c9;}
+
+  .app{display:grid;grid-template-columns:288px 1fr;height:100vh;}
+
+  /* ---------- sidebar ---------- */
+  .side{
+    border-right:1px solid var(--line);background:#faf8f3;
+    display:flex;flex-direction:column;min-height:0;
+  }
+  .side-head{
+    padding:20px 20px 14px;border-bottom:1px solid var(--line);
+  }
+  .brand{font-family:var(--serif);font-weight:600;font-size:19px;letter-spacing:.2px;}
+  .brand-sub{font-family:var(--mono);font-size:10.5px;color:var(--muted);margin-top:4px;letter-spacing:.4px;text-transform:uppercase;}
+  .side-tools{display:flex;gap:8px;padding:12px 16px;border-bottom:1px solid var(--line);}
+  .side-tools .btn{flex:1;}
+  .qlist{overflow-y:auto;padding:10px;flex:1;min-height:0;}
+  .ghead{display:flex;align-items:center;gap:7px;padding:14px 6px 6px;
+         color:var(--muted);user-select:none;cursor:pointer;border-radius:8px;}
+  .ghead:hover{color:var(--ink);}
+  .ghead:first-child{padding-top:4px;}
+  .ghead .chev{display:inline-block;transition:transform .15s;font-size:13px;line-height:1;}
+  .ghead.closed .chev{transform:rotate(-90deg);}
+  .ghead .gname{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+                font-family:var(--serif);font-size:16px;font-weight:600;color:var(--ink);letter-spacing:.2px;}
+  .ghead .gcount{font-family:var(--mono);font-size:11px;}
+  .ghead .gbtn{border:none;background:none;color:var(--faint);font-size:12px;padding:1px 5px;border-radius:5px;visibility:hidden;cursor:pointer;}
+  .ghead:hover .gbtn{visibility:visible;}
+  .ghead .gbtn:hover{color:var(--ink);background:#eee8db;}
+  @media (prefers-reduced-motion:reduce){.ghead .chev{transition:none;}}
+  .qitem{
+    padding:12px 13px;border-radius:11px;border:1px solid transparent;
+    margin-bottom:6px;cursor:pointer;transition:background .12s,border-color .12s;
+  }
+  .qitem:hover{background:#f2eee4;}
+  .qitem.active{background:#fff;border-color:var(--line-strong);box-shadow:0 1px 2px rgba(60,50,30,.04);}
+  .qitem-title{font-weight:500;font-size:14.5px;line-height:1.35;}
+  .qitem-meta{font-family:var(--mono);font-size:10.5px;color:var(--muted);margin-top:6px;letter-spacing:.3px;
+              display:flex;align-items:center;gap:4px;}
+  .qitem-meta b{color:var(--pat-ink);font-weight:500;}
+  .qitem-meta i{color:var(--phr-ink);font-style:normal;font-weight:500;}
+  .cnt{margin-left:auto;display:inline-flex;align-items:center;gap:2px;}
+  .cnt-n{min-width:16px;text-align:center;color:var(--ink);font-weight:600;font-size:11.5px;}
+  .cnt button{border:1px solid var(--line-strong);background:var(--card);color:var(--muted);
+              width:19px;height:19px;border-radius:6px;font-size:12px;line-height:1;padding:0;
+              display:inline-flex;align-items:center;justify-content:center;}
+  .cnt button:hover{color:var(--ink);border-color:var(--faint);}
+  .cnt button:active{background:#efe9dc;}
+
+  /* ---------- main ---------- */
+  .main{overflow-y:auto;min-height:0;}
+  .main-inner{max-width:760px;margin:0 auto;padding:38px 40px 90px;}
+  .ans-title{font-family:var(--serif);font-weight:600;font-size:27px;line-height:1.25;margin:0 0 22px;}
+
+  .controls{display:flex;flex-wrap:wrap;align-items:center;gap:14px;margin-bottom:8px;}
+  .seg{display:inline-flex;background:#ece7dc;border-radius:10px;padding:3px;}
+  .seg button{
+    border:none;background:transparent;padding:7px 16px;border-radius:8px;
+    font-size:13.5px;font-weight:500;color:var(--muted);transition:all .14s;
+  }
+  .seg button.on{background:var(--card);color:var(--ink);box-shadow:0 1px 2px rgba(60,50,30,.08);}
+  .seg button:hover:not(.on){color:var(--ink);}
+
+  .aux{display:flex;gap:8px;margin-left:auto;}
+  .toggle{
+    border:1px solid var(--line-strong);background:transparent;border-radius:8px;
+    padding:6px 12px;font-size:12.5px;color:var(--muted);transition:all .14s;
+  }
+  .toggle:hover{border-color:var(--faint);color:var(--ink);}
+  .toggle.on{background:var(--ink);border-color:var(--ink);color:#f7f4ee;}
+  .toggle[hidden]{display:none;}
+
+  .rowbtns{display:flex;gap:8px;margin-bottom:20px;}
+  .linkbtn{background:none;border:none;font-size:12.5px;color:var(--muted);padding:2px 0;}
+  .linkbtn:hover{color:var(--ink);text-decoration:underline;}
+  .linkbtn.danger:hover{color:#a8442f;}
+
+  /* ---------- practice card ---------- */
+  .card{
+    background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+    padding:30px 32px;font-family:var(--serif);font-size:18px;line-height:2.05;
+    box-shadow:0 1px 3px rgba(60,50,30,.04);
+  }
+  .card p{margin:0 0 1.1em;}
+  .card p:last-child{margin-bottom:0;}
+
+  /* target = plain text, no colored background; a small number prefixes each item */
+  .num{font-family:var(--mono);font-size:.6em;font-weight:600;color:var(--muted);
+       vertical-align:.55em;margin:0 3px 0 1px;user-select:none;}
+  .hl{position:relative;cursor:pointer;}
+  .hl:hover{text-decoration:underline dotted var(--faint);text-underline-offset:4px;}
+  /* pinned / global inline zh */
+  .hl.pinned::after,.card.show-zh .hl::after{
+    content:attr(data-zh);font-family:var(--sans);font-size:.62em;font-weight:500;
+    margin-left:6px;padding:1px 6px;border-radius:5px;vertical-align:2px;
+    background:#f1ede4;color:var(--muted);white-space:nowrap;text-decoration:none;
+  }
+  /* hover tooltip (desktop) */
+  .hl[data-zh]:not([data-zh=""]):hover::before{
+    content:attr(data-zh);position:absolute;left:50%;bottom:calc(100% + 7px);
+    transform:translateX(-50%);font-family:var(--sans);font-size:12.5px;line-height:1.4;
+    background:var(--ink);color:#f7f4ee;padding:6px 10px;border-radius:8px;white-space:nowrap;
+    z-index:5;pointer-events:none;box-shadow:0 3px 12px rgba(0,0,0,.18);
+  }
+  .card.show-zh .hl:hover::before,.hl.pinned:hover::before{display:none;}
+
+  /* blank */
+  .blank{
+    display:inline-block;vertical-align:bottom;min-width:1.7em;max-width:var(--w,6ch);
+    overflow:hidden;white-space:nowrap;
+    border-bottom:1.7px solid var(--faint);line-height:1.2;cursor:pointer;
+    transition:border-color .14s;
+  }
+  .blank .bt{visibility:hidden;} /* truly not rendered: survives forced-colors / high contrast */
+  .blank:hover{border-bottom-color:var(--ink);}
+  .blank.revealed,.card.reveal-blanks .blank{
+    max-width:none;overflow:visible;white-space:normal;color:var(--muted);border-bottom-color:var(--line);
+  }
+  .blank.revealed .bt,.card.reveal-blanks .blank .bt{visibility:visible;}
+  @media (forced-colors:active){
+    .blank{border-bottom-width:2px;}
+  }
+
+  /* footnote for unmatched items */
+  .footnote{margin-top:16px;font-family:var(--sans);font-size:12px;color:var(--muted);
+            line-height:1.6;padding:11px 14px;background:#faf7f0;border:1px dashed var(--line-strong);
+            border-radius:10px;}
+  .footnote b{color:var(--ink);font-weight:500;}
+
+  /* ---------- buttons ---------- */
+  .btn{
+    border:1px solid var(--line-strong);background:var(--card);border-radius:9px;
+    padding:8px 14px;font-size:13px;font-weight:500;transition:all .14s;
+  }
+  .btn:hover{border-color:var(--faint);}
+  .btn.primary{background:var(--ink);border-color:var(--ink);color:#f7f4ee;}
+  .btn.primary:hover{background:#413a32;}
+  .btn.ghost{background:transparent;}
+
+  /* ---------- empty ---------- */
+  .empty{max-width:520px;margin:14vh auto 0;text-align:center;color:var(--muted);}
+  .empty h2{font-family:var(--serif);color:var(--ink);font-weight:600;font-size:22px;margin:0 0 10px;}
+  .empty p{margin:0 0 22px;line-height:1.6;}
+
+  /* ---------- modal ---------- */
+  .overlay{position:fixed;inset:0;background:rgba(40,34,28,.42);display:none;
+           align-items:flex-start;justify-content:center;padding:40px 16px;z-index:50;overflow-y:auto;}
+  .overlay.show{display:flex;}
+  .modal{background:var(--bg);border-radius:16px;width:100%;max-width:660px;
+         box-shadow:0 20px 60px rgba(0,0,0,.28);border:1px solid var(--line-strong);}
+  .modal-head{display:flex;align-items:center;justify-content:space-between;
+              padding:20px 24px;border-bottom:1px solid var(--line);}
+  .modal-head h3{font-family:var(--serif);font-weight:600;font-size:19px;margin:0;}
+  .modal-body{padding:22px 24px;}
+  .field{margin-bottom:18px;}
+  .field label{display:block;font-size:12.5px;font-weight:500;color:var(--muted);margin-bottom:6px;
+               font-family:var(--mono);letter-spacing:.3px;text-transform:uppercase;}
+  .field .desc{font-size:12px;color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0;
+               margin-top:3px;font-family:var(--sans);}
+  input.f,textarea.f{
+    width:100%;border:1px solid var(--line-strong);border-radius:9px;background:var(--card);
+    padding:10px 12px;font-family:var(--sans);font-size:14px;color:var(--ink);resize:vertical;
+  }
+  input.f:focus,textarea.f:focus{outline:none;border-color:var(--faint);box-shadow:0 0 0 3px rgba(200,180,140,.2);}
+  textarea.f{line-height:1.5;}
+  .modal-foot{display:flex;gap:10px;padding:16px 24px 22px;align-items:center;}
+  .modal-foot .spacer{flex:1;}
+  details.quick{margin-bottom:18px;border:1px solid var(--line);border-radius:10px;background:#faf8f3;}
+  details.quick summary{padding:11px 14px;font-size:13px;font-weight:500;cursor:pointer;color:var(--ink);list-style:none;}
+  details.quick summary::-webkit-details-marker{display:none;}
+  details.quick summary::before{content:"⌵ ";color:var(--muted);}
+  details.quick[open] summary::before{content:"⌃ ";}
+  details.quick .qbody{padding:0 14px 14px;}
+
+  a{color:var(--phr-ink);}
+  button:focus-visible,summary:focus-visible,input:focus-visible,textarea:focus-visible,.qitem:focus-visible{
+    outline:2px solid var(--phr-ink);outline-offset:2px;
+  }
+
+  /* ---------- responsive ---------- */
+  @media (max-width:820px){
+    .app{grid-template-columns:1fr;height:auto;min-height:100vh;}
+    .side{border-right:none;border-bottom:1px solid var(--line);}
+    .qlist{display:flex;overflow-x:auto;padding:10px;gap:8px;flex:none;align-items:center;}
+    .ghead{flex:0 0 auto;padding:0 2px;}
+    .ghead .gbtn{visibility:visible;}
+    .qitem{margin-bottom:0;min-width:235px;flex:0 0 auto;}
+    .main-inner{padding:26px 20px 80px;}
+    .ans-title{font-size:23px;}
+    .card{padding:22px 20px;font-size:17px;line-height:1.95;}
+    .aux{margin-left:0;width:100%;}
+  }
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;}}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="side-head">
+      <div class="brand">面试回答挖空练习</div>
+      <div class="brand-sub">full · pattern · phrase</div>
+    </div>
+    <div class="side-tools">
+      <button class="btn primary" id="newBtn">+ 新建</button>
+      <button class="btn ghost" id="importBtn">导入</button>
+      <button class="btn ghost" id="exportBtn">导出</button>
+      <input type="file" id="importFile" accept="application/json" hidden>
+    </div>
+    <div class="qlist" id="qlist"></div>
+  </aside>
+
+  <main class="main">
+    <div class="main-inner" id="mainInner"></div>
+  </main>
+</div>
+
+<!-- editor modal -->
+<div class="overlay" id="overlay">
+  <div class="modal" role="dialog" aria-modal="true">
+    <div class="modal-head">
+      <h3 id="modalTitle">编辑回答</h3>
+      <button class="btn ghost" id="closeModal" aria-label="关闭">✕</button>
+    </div>
+    <div class="modal-body">
+      <details class="quick">
+        <summary>快速粘贴（按你的原格式一次填入）</summary>
+        <div class="qbody">
+          <textarea class="f" id="pasteBox" rows="7" placeholder="把「问题 / **句型** / **短语** / 回答全文」整段粘进来，点下面的按钮自动拆分填入。"></textarea>
+          <div style="margin-top:10px;"><button class="btn" id="parseBtn">解析并填入</button></div>
+        </div>
+      </details>
+
+      <div class="field">
+        <label>标题</label>
+        <input class="f" id="fTitle" placeholder="例：Sonio GTM 介绍">
+      </div>
+      <div class="field">
+        <label>分组</label>
+        <div class="desc">输入新名称即创建分组，选已有名称即归入该组，留空则放在「未分组」。</div>
+        <input class="f" id="fGroup" list="groupList" placeholder="例：实习总体介绍">
+        <datalist id="groupList"></datalist>
+      </div>
+      <div class="field">
+        <label>句型（每行一个）</label>
+        <div class="desc">格式：<code>English text (中文)</code>，用 <code>...</code> 表示可替换的空位。中文可留空。</div>
+        <textarea class="f" id="fPatterns" rows="6" placeholder="... is a SaaS company in a pretty niche ... space (...是一家处于相当小众...领域的 SaaS 公司)"></textarea>
+      </div>
+      <div class="field">
+        <label>短语（每行一个）</label>
+        <div class="desc">格式：<code>English (中文)</code>。中文可留空。</div>
+        <textarea class="f" id="fPhrases" rows="6" placeholder="go-to-market motion (市场进入打法)"></textarea>
+      </div>
+      <div class="field">
+        <label>回答全文</label>
+        <textarea class="f" id="fFull" rows="8" placeholder="粘贴完整回答。段落之间空一行即可。"></textarea>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn ghost linkbtn danger" id="deleteBtn" style="display:none;">删除这条</button>
+      <div class="spacer"></div>
+      <button class="btn ghost" id="cancelBtn">取消</button>
+      <button class="btn primary" id="saveBtn">保存</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   Matching engine  (verified against the seed data in Node)
+   ============================================================ */
+const IRREGULARS=[
+  ['bring','brings','bringing','brought'],['make','makes','making','made'],
+  ['take','takes','taking','took','taken'],['get','gets','getting','got','gotten'],
+  ['go','goes','going','went','gone'],['have','has','having','had'],
+  ['do','does','doing','did','done'],['see','sees','seeing','saw','seen'],
+  ['build','builds','building','built'],['send','sends','sending','sent'],
+  ['find','finds','finding','found'],['keep','keeps','keeping','kept'],
+  ['run','runs','running','ran'],['begin','begins','beginning','began','begun'],
+  ['buy','buys','buying','bought'],['think','thinks','thinking','thought'],
+  ['lead','leads','leading','led'],['grow','grows','growing','grew','grown'],
+  ['drive','drives','driving','drove','driven'],['sell','sells','selling','sold'],
+];
+const APOS="['\\u2018\\u2019\\u02BC]";
+function normApos(s){return s.replace(/[\u2018\u2019\u02BC]/g,"'").replace(/[\u201C\u201D]/g,'"');}
+function esc(s){return s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');}
+function apFlex(escaped){return escaped.replace(/'/g,APOS);} // regex accepts straight or curly apostrophe
+function coreFragment(core){
+  // core comes from a normApos'd query, so apostrophes here are straight
+  let base=core,poss='';
+  const pm=base.match(/^([A-Za-z]{2,})('s|s'|')$/i); // possessive tail: word's / words' / word'
+  if(pm){base=pm[1];poss='(?:'+APOS+'?[sS]?|[sS]?'+APOS+'?)';}
+  const low=base.toLowerCase();
+  for(const g of IRREGULARS){if(g.includes(low))return '(?:'+g.map(esc).join('|')+')'+poss;}
+  const pure=/^[a-z]+$/.test(low);
+  if(!pure||low.length<=3)return apFlex(esc(base))+poss; // short, or contains ' (it's, don't): exact but apostrophe-flexible
+  let stem=low;
+  for(const sf of ['ing','es','ed','s','d']){if(stem.length-sf.length>=2&&stem.endsWith(sf)){stem=stem.slice(0,-sf.length);break;}}
+  return esc(stem)+'[a-z]{0,3}'+poss;
+}
+function buildRegex(query){
+  const cores=normApos(query).trim().split(/[^A-Za-z0-9']+/).filter(Boolean);
+  if(!cores.length)return null;
+  const body=cores.map(coreFragment).join('[^A-Za-z0-9]+');
+  try{return new RegExp('(?<![A-Za-z0-9])'+body+'(?![A-Za-z0-9])','gi');}
+  catch(e){return new RegExp(body,'gi');}
+}
+function findAfter(text,query,cursor){
+  const re=buildRegex(query);if(!re)return null;re.lastIndex=cursor||0;
+  const m=re.exec(text);return m?{start:m.index,end:m.index+m[0].length}:null;
+}
+function findAll(text,query){
+  const re=buildRegex(query);if(!re)return[];
+  const out=[];let m,guard=0;
+  while((m=re.exec(text))&&guard++<800){out.push({start:m.index,end:m.index+m[0].length});if(m.index===re.lastIndex)re.lastIndex++;}
+  return out;
+}
+function matchPattern(text,pat){
+  const lits=normApos(pat).split(/\s*(?:\.\.\.|…)\s*/).map(s=>s.trim()).filter(Boolean);
+  const spans=[];let cursor=0;
+  for(const lit of lits){const sp=findAfter(text,lit,cursor);if(sp){spans.push(sp);cursor=sp.end;}}
+  return {spans,matched:spans.length>0};
+}
+
+/* ============================================================
+   State + storage
+   ============================================================ */
+const LS_KEY='interview_practice_v1';
+let state={answers:[],selectedId:null,mode:'full',showZh:false,revealAll:false,collapsed:[]};
+
+function uid(){return 'a'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
+
+function seedData(){
+  return [{
+    id:uid(),
+    title:'Sonio GTM 介绍',
+    group:'实习总体介绍',
+    patterns:[
+      {en:'... is a SaaS company in a pretty niche ... space',zh:'...是一家处于相当小众...领域的 SaaS 公司'},
+      {en:'its audience was quite fixed and well defined',zh:'它的受众相当固定且明确'},
+      {en:'Because of that, our main ... motion was ...',zh:'正因如此，我们主要的...打法是...'},
+      {en:"it's more efficient to ... than ...",zh:'...比...更高效'},
+      {en:'they handled the top of the funnel and brought leads in',zh:'它们负责漏斗顶端并带来线索'},
+      {en:'we use it for ... and ...',zh:'我们用它来做...和...'},
+    ],
+    phrases:[
+      {en:'a pretty niche medical space',zh:'一个相当小众的医疗领域'},
+      {en:'fixed and well defined',zh:'固定且明确的'},
+      {en:'go-to-market motion',zh:'市场进入打法，GTM 打法'},
+      {en:'sales-led outbound',zh:'以销售为主导的 outbound'},
+      {en:'known target accounts',zh:'已知的目标客户'},
+      {en:'wait for inbound',zh:'等待自主上门的线索'},
+      {en:'the highest pipeline conversion rate',zh:'最高的管道转化率'},
+      {en:'digital inbound',zh:'数字化 inbound 渠道'},
+      {en:'paid ads',zh:'付费广告'},
+      {en:'the top of the funnel',zh:'漏斗顶端'},
+      {en:'bring leads in',zh:'带来/引入线索'},
+      {en:'cold outbound',zh:'陌生开发触达'},
+      {en:'nurture sequences',zh:'培育型邮件序列'},
+      {en:'certain persona',zh:'特定的客户画像'},
+      {en:'push them down in the funnel',zh:'推动他们向漏斗下游移动'},
+      {en:'make the first contact',zh:'建立首次联系'},
+    ],
+    fullText:
+"Sonio is a SaaS company in a pretty niche medical space, which means its audience was quite fixed and well defined.\n\n"+
+"Because of that, our main go-to-market motion was sales-led outbound, because it's more efficient to reach out to known target accounts than wait for inbound.\n\n"+
+"The most important marketing channel was events, especially medical conferences where we had a booth, they usually have the highest pipeline conversion rate.\n\n"+
+"Then we had digital inbound, like website, webinars, and paid ads, they handled the top of the funnel and brought lead in.\n\n"+
+"And for email campaign, we use it for cold outbound and nurture sequences for certain persona, push them down in the funnel."
+  }];
+}
+
+function load(){
+  try{
+    const raw=localStorage.getItem(LS_KEY);
+    if(raw){const d=JSON.parse(raw);state.answers=d.answers||[];state.selectedId=d.selectedId||null;
+      if('showZh'in d)state.showZh=d.showZh;
+      if(Array.isArray(d.collapsed))state.collapsed=d.collapsed;}
+  }catch(e){}
+  if(!state.answers.length)state.answers=seedData();
+  if(!state.selectedId||!state.answers.find(a=>a.id===state.selectedId))
+    state.selectedId=state.answers[0]?state.answers[0].id:null;
+}
+function save(){
+  try{localStorage.setItem(LS_KEY,JSON.stringify({answers:state.answers,selectedId:state.selectedId,showZh:state.showZh,collapsed:state.collapsed}));}catch(e){}
+}
+
+/* ============================================================
+   Rendering helpers
+   ============================================================ */
+function escHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function escAttr(s){return escHtml(s).replace(/"/g,'&quot;');}
+function spacesToHtml(s){return escHtml(s).replace(/\n/g,'<br>');}
+
+function computeItems(answer,kind){
+  const text=answer.fullText||'';
+  const src=kind==='pattern'?(answer.patterns||[]):(answer.phrases||[]);
+  return src.map(it=>{
+    const r=kind==='pattern'?matchPattern(text,it.en):{spans:findAll(text,it.en)};
+    return {en:it.en,zh:it.zh||'',spans:r.spans};
+  });
+}
+
+function renderFull(text){
+  return text.split(/\n{2,}/).map(p=>'<p>'+spacesToHtml(p)+'</p>').join('');
+}
+
+function renderMasked(text,items){
+  // owner map: first-wins
+  const owner=new Int16Array(text.length).fill(-1);
+  items.forEach((it,idx)=>it.spans.forEach(sp=>{
+    for(let i=sp.start;i<sp.end&&i<text.length;i++) if(owner[i]===-1) owner[i]=idx;
+  }));
+  const paras=[];{
+    let re=/\n{2,}/g,last=0,m;
+    while((m=re.exec(text))){paras.push([last,m.index]);last=m.index+m[0].length;}
+    paras.push([last,text.length]);
+  }
+  const seen=new Set();
+  let html='';
+  for(const [ps,pe] of paras){
+    if(pe<=ps){continue;}
+    let seg='',i=ps;
+    while(i<pe){
+      const o=owner[i];let j=i+1;while(j<pe&&owner[j]===o)j++;
+      const chunk=text.slice(i,j);
+      if(o>=0){
+        const it=items[o];
+        let num='';
+        if(!seen.has(o)){seen.add(o); if(it.num) num='<span class="num">'+it.num+'.</span>';}
+        seg+=num+'<span class="hl" data-zh="'+escAttr(it.zh)+'" data-i="'+o+'">'+escHtml(chunk)+'</span>';
+      }else{
+        const lead=chunk.match(/^\s*/)[0], trail=chunk.match(/\s*$/)[0];
+        const core=chunk.slice(lead.length,chunk.length-trail.length);
+        seg+=spacesToHtml(lead);
+        if(core.length){
+          if(!/[A-Za-z0-9]/.test(core)){
+            seg+=escHtml(core); // punctuation only: keep visible as glue
+          }else{
+            const w=Math.min(Math.max(core.replace(/\s+/g,' ').length,2),8);
+            seg+='<span class="blank" style="--w:'+w+'ch"><span class="bt">'+escHtml(core)+'</span></span>';
+          }
+        }
+        seg+=spacesToHtml(trail);
+      }
+      i=j;
+    }
+    html+='<p>'+seg+'</p>';
+  }
+  return html;
+}
+
+/* ============================================================
+   Main view
+   ============================================================ */
+const mainInner=document.getElementById('mainInner');
+const qlist=document.getElementById('qlist');
+
+const UNGROUPED='未分组';
+function groupOf(a){return (a.group||'').trim()||UNGROUPED;}
+function allGroups(){
+  const s=[];state.answers.forEach(a=>{const g=groupOf(a);if(g!==UNGROUPED&&!s.includes(g))s.push(g);});return s;
+}
+function renderSidebar(){
+  qlist.innerHTML='';
+  const groups=new Map();
+  state.answers.forEach(a=>{const g=groupOf(a);if(!groups.has(g))groups.set(g,[]);groups.get(g).push(a);});
+  // named groups in first-appearance order, 未分组 last
+  const names=[...groups.keys()].filter(g=>g!==UNGROUPED);
+  if(groups.has(UNGROUPED))names.push(UNGROUPED);
+  for(const gname of names){
+    const list=groups.get(gname);
+    const isCollapsed=state.collapsed.includes(gname);
+    if(names.length>1||gname!==UNGROUPED){
+      const gh=document.createElement('div');
+      gh.className='ghead'+(isCollapsed?' closed':'');
+      gh.tabIndex=0;
+      gh.innerHTML='<span class="chev">⌄</span><span class="gname">'+escHtml(gname)+'</span><span class="gcount">'+list.length+'</span>'+
+        (gname!==UNGROUPED?'<button class="gbtn" title="重命名或解散分组">✎</button>':'');
+      const toggle=()=>{
+        const i=state.collapsed.indexOf(gname);
+        if(i>=0)state.collapsed.splice(i,1);else state.collapsed.push(gname);
+        save();renderSidebar();
+      };
+      gh.onclick=toggle;
+      gh.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();toggle();}};
+      const btn=gh.querySelector('.gbtn');
+      if(btn)btn.onclick=e=>{e.stopPropagation();
+        const nn=prompt('重命名分组「'+gname+'」\n（清空后确定 = 解散分组，卡片移入「'+UNGROUPED+'」）',gname);
+        if(nn===null)return;
+        const newName=nn.trim();
+        state.answers.forEach(a=>{if(groupOf(a)===gname)a.group=newName;});
+        const ci=state.collapsed.indexOf(gname);
+        if(ci>=0){state.collapsed.splice(ci,1);if(newName)state.collapsed.push(newName);}
+        save();renderAll();
+      };
+      qlist.appendChild(gh);
+    }
+    if(isCollapsed&&(names.length>1||gname!==UNGROUPED))continue;
+    list.forEach(a=>{
+      if(typeof a.reviews!=='number')a.reviews=0;
+      const el=document.createElement('div');
+      el.className='qitem'+(a.id===state.selectedId?' active':'');
+      el.tabIndex=0;
+      el.innerHTML='<div class="qitem-title">'+escHtml(a.title||'（未命名）')+'</div>'+
+        '<div class="qitem-meta">句型 <b>'+(a.patterns||[]).length+'</b> · 短语 <i>'+(a.phrases||[]).length+'</i>'+
+        '<span class="cnt">'+
+        '<button data-d="-1" aria-label="减少复习次数">−</button>'+
+        '<span class="cnt-n">'+a.reviews+'</span>'+
+        '<button data-d="1" aria-label="增加复习次数">+</button></span></div>';
+      // counter buttons: update in place, never select the card or re-render (keeps scroll position)
+      el.querySelectorAll('.cnt button').forEach(b=>{
+        b.onclick=e=>{
+          e.stopPropagation();
+          a.reviews=Math.max(0,(a.reviews||0)+parseInt(b.dataset.d,10));
+          el.querySelector('.cnt-n').textContent=a.reviews;
+          save();
+        };
+      });
+      el.onclick=()=>{state.selectedId=a.id;save();renderAll();};
+      el.onkeydown=e=>{if((e.key==='Enter'||e.key===' ')&&e.target===el){e.preventDefault();el.click();}};
+      qlist.appendChild(el);
+    });
+  }
+}
+
+function renderMain(){
+  const a=state.answers.find(x=>x.id===state.selectedId);
+  if(!a){
+    mainInner.innerHTML='<div class="empty"><h2>还没有内容</h2>'+
+      '<p>新建一条回答，把你写好的句型、短语和全文放进来，就能开始三种模式的挖空练习了。</p>'+
+      '<button class="btn primary" onclick="openEditor(null)">+ 新建第一条</button></div>';
+    return;
+  }
+  const mode=state.mode;
+  let bodyHtml,footHtml='';
+  if(mode==='full'){
+    bodyHtml=renderFull(a.fullText||'');
+  }else{
+    const kind=mode==='pattern'?'pattern':'phrase';
+    const items=computeItems(a,kind);
+    let n=0; items.forEach(it=>{ if(it.spans.length) it.num=++n; });
+    bodyHtml=renderMasked(a.fullText||'',items);
+    const unmatched=items.filter(it=>it.spans.length===0);
+    if(unmatched.length){
+      footHtml='<div class="footnote">这些'+(mode==='pattern'?'句型':'短语')+'没在全文里找到，练习时已跳过（可能是措辞不同或写错）：<br>'+
+        unmatched.map(it=>'<b>'+escHtml(it.en)+'</b>'+(it.zh?'（'+escHtml(it.zh)+'）':'')).join('；')+'</div>';
+    }
+  }
+  const cardCls='card'+(state.showZh?' show-zh':'')+(state.revealAll?' reveal-blanks':'');
+  mainInner.innerHTML=
+    (groupOf(a)!==UNGROUPED?'<div class="brand-sub" style="margin-bottom:6px;">'+escHtml(groupOf(a))+'</div>':'')+
+    '<h1 class="ans-title">'+escHtml(a.title||'（未命名）')+'</h1>'+
+    '<div class="controls">'+
+      '<div class="seg">'+
+        '<button data-m="full" class="'+(mode==='full'?'on':'')+'">全文</button>'+
+        '<button data-m="pattern" class="'+(mode==='pattern'?'on':'')+'">句型</button>'+
+        '<button data-m="phrase" class="'+(mode==='phrase'?'on':'')+'">短语</button>'+
+      '</div>'+
+      '<div class="aux">'+
+        '<button class="toggle'+(state.revealAll?' on':'')+'" id="tReveal"'+(mode==='full'?' hidden':'')+'>显示全部原文</button>'+
+        '<button class="toggle'+(state.showZh?' on':'')+'" id="tZh"'+(mode==='full'?' hidden':'')+'>显示中文</button>'+
+      '</div>'+
+    '</div>'+
+    '<div class="rowbtns">'+
+      '<button class="linkbtn" onclick="openEditor(state.selectedId)">编辑</button>'+
+      '<button class="linkbtn danger" id="delInline">删除</button>'+
+    '</div>'+
+    '<div class="'+cardCls+'" id="practiceCard">'+bodyHtml+'</div>'+
+    footHtml;
+
+  // wire mode buttons
+  mainInner.querySelectorAll('.seg button').forEach(b=>{
+    b.onclick=()=>{state.mode=b.dataset.m;renderMain();};
+  });
+  const tR=document.getElementById('tReveal'); if(tR)tR.onclick=()=>{state.revealAll=!state.revealAll;renderMain();};
+  const tZ=document.getElementById('tZh'); if(tZ)tZ.onclick=()=>{state.showZh=!state.showZh;save();renderMain();};
+  document.getElementById('delInline').onclick=()=>deleteAnswer(a.id);
+
+  // card interactions (delegated)
+  const card=document.getElementById('practiceCard');
+  if(card){
+    card.addEventListener('click',e=>{
+      const bl=e.target.closest('.blank');
+      if(bl){bl.classList.toggle('revealed');return;}
+      const hl=e.target.closest('.hl');
+      if(hl){hl.classList.toggle('pinned');}
+    });
+  }
+}
+
+function renderAll(){renderSidebar();renderMain();}
+
+/* ============================================================
+   Editor
+   ============================================================ */
+const overlay=document.getElementById('overlay');
+let editingId=null;
+
+function itemsToText(list){return (list||[]).map(it=>it.zh?(it.en+' ('+it.zh+')'):it.en).join('\n');}
+function parseItemLine(line){
+  const m=line.match(/^(.*?)[\(（]([^()（）]*)[\)）]\s*$/);
+  if(m)return {en:m[1].trim(),zh:m[2].trim()};
+  return {en:line.trim(),zh:''};
+}
+function textToItems(txt){
+  return txt.split('\n').map(l=>l.trim()).filter(Boolean).map(parseItemLine);
+}
+
+window.openEditor=function(id){
+  editingId=id;
+  const a=id?state.answers.find(x=>x.id===id):null;
+  document.getElementById('modalTitle').textContent=a?'编辑回答':'新建回答';
+  document.getElementById('fTitle').value=a?a.title:'';
+  document.getElementById('fGroup').value=a?(a.group||''):'';
+  document.getElementById('groupList').innerHTML=allGroups().map(g=>'<option value="'+escAttr(g)+'">').join('');
+  document.getElementById('fPatterns').value=a?itemsToText(a.patterns):'';
+  document.getElementById('fPhrases').value=a?itemsToText(a.phrases):'';
+  document.getElementById('fFull').value=a?a.fullText:'';
+  document.getElementById('pasteBox').value='';
+  document.getElementById('deleteBtn').style.display=a?'inline-block':'none';
+  const q=document.querySelector('details.quick'); if(q)q.open=!id;
+  overlay.classList.add('show');
+  setTimeout(()=>document.getElementById(id?'fTitle':'pasteBox').focus(),40);
+};
+function closeEditor(){overlay.classList.remove('show');editingId=null;}
+
+document.getElementById('saveBtn').onclick=()=>{
+  const title=document.getElementById('fTitle').value.trim();
+  const group=document.getElementById('fGroup').value.trim();
+  const patterns=textToItems(document.getElementById('fPatterns').value);
+  const phrases=textToItems(document.getElementById('fPhrases').value);
+  const fullText=document.getElementById('fFull').value.replace(/\r\n/g,'\n').trim();
+  if(!title&&!fullText){closeEditor();return;}
+  if(editingId){
+    const a=state.answers.find(x=>x.id===editingId);
+    a.title=title;a.group=group;a.patterns=patterns;a.phrases=phrases;a.fullText=fullText;
+  }else{
+    const na={id:uid(),title:title||'（未命名）',group,patterns,phrases,fullText};
+    state.answers.push(na);state.selectedId=na.id;
+  }
+  const gi=state.collapsed.indexOf(group||UNGROUPED);
+  if(gi>=0)state.collapsed.splice(gi,1); // saving into a collapsed group re-opens it so the card stays visible
+  save();closeEditor();renderAll();
+};
+document.getElementById('deleteBtn').onclick=()=>{if(editingId){deleteAnswer(editingId,true);closeEditor();}};
+document.getElementById('cancelBtn').onclick=closeEditor;
+document.getElementById('closeModal').onclick=closeEditor;
+// Only close when the press STARTED on the backdrop and ended there too.
+// A text-selection drag that ends outside the modal registers its click on the
+// backdrop, which used to close the window mid-selection.
+let pressStartedOnBackdrop=false;
+overlay.addEventListener('mousedown',e=>{pressStartedOnBackdrop=(e.target===overlay);});
+overlay.addEventListener('click',e=>{
+  if(e.target===overlay&&pressStartedOnBackdrop)closeEditor();
+  pressStartedOnBackdrop=false;
+});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&overlay.classList.contains('show'))closeEditor();});
+
+function deleteAnswer(id,skipConfirm){
+  const a=state.answers.find(x=>x.id===id);if(!a)return;
+  if(!skipConfirm&&!confirm('删除「'+(a.title||'未命名')+'」？此操作无法撤销。'))return;
+  state.answers=state.answers.filter(x=>x.id!==id);
+  if(state.selectedId===id)state.selectedId=state.answers[0]?state.answers[0].id:null;
+  save();renderAll();
+}
+
+// quick paste parser — order-agnostic, tolerant of markdown / numbering / labels
+function parsePasted(raw){
+  const lines=raw.replace(/\r\n/g,'\n').split('\n');
+  const strip=l=>l.replace(/^[\s>*#\-•·\d.、)]+/,'').replace(/\s+/g,'');
+  const KW={
+    pattern:['句型','句式','sentencepatterns','sentencepattern','patterns','pattern'],
+    phrase:['短语','词组','短句','phrases','phrase'],
+    full:['回答全文','全文回答','答案全文','完整回答','fullanswer','fulltext','回答','全文','answer']
+  };
+  const order=['pattern','phrase','full'];
+  function headerType(line){
+    const s=strip(line).toLowerCase();
+    if(!s)return null;
+    for(const t of order){
+      for(const k of KW[t]){
+        if(s.startsWith(k)){
+          const rest=s.slice(k.length).replace(/[()（）:：*]/g,'');
+          if(rest.length<=24)return t;
+        }
+      }
+    }
+    return null;
+  }
+  const marks=[];
+  lines.forEach((l,i)=>{const t=headerType(l);if(t)marks.push({i,type:t});});
+  const firstMark=marks.length?marks[0].i:lines.length;
+  let title='';
+  for(let i=0;i<firstMark;i++){
+    const l=lines[i];
+    const mm=l.match(/^\s*(?:问题|标题|题目|question)\s*[:：]\s*(.+)$/i);
+    if(mm){title=mm[1].trim();break;}
+    if(!title&&l.trim()){title=l.replace(/^[\s>*#\-•]+/,'').trim();break;}
+  }
+  const sec={pattern:[],phrase:[],full:[]};
+  for(let k=0;k<marks.length;k++){
+    const cur=marks[k],nextI=k+1<marks.length?marks[k+1].i:lines.length;
+    let body=lines.slice(cur.i+1,nextI);
+    const inline=lines[cur.i].match(/[:：]\s*(.+)$/);
+    if(inline)body=[inline[1]].concat(body);
+    if(cur.type==='full'){sec.full.push(body.join('\n'));}
+    else{body.forEach(l=>{const t=l.replace(/^[\s>*#\-•·]+/,'').replace(/^\d+[.)、]\s*/,'').trim();if(t)sec[cur.type].push(t);});}
+  }
+  return {title,patterns:sec.pattern,phrases:sec.phrase,full:sec.full.join('\n\n').replace(/^\s*[:：]\s*/,'').trim()};
+}
+function runParse(){
+  const raw=document.getElementById('pasteBox').value;
+  if(!raw.trim())return;
+  const r=parsePasted(raw);
+  if(r.title)document.getElementById('fTitle').value=r.title;
+  if(r.patterns.length)document.getElementById('fPatterns').value=r.patterns.join('\n');
+  if(r.phrases.length)document.getElementById('fPhrases').value=r.phrases.join('\n');
+  if(r.full)document.getElementById('fFull').value=r.full;
+}
+document.getElementById('parseBtn').onclick=runParse;
+document.getElementById('pasteBox').addEventListener('paste',()=>setTimeout(runParse,60));
+
+/* ============================================================
+   Import / export
+   ============================================================ */
+document.getElementById('newBtn').onclick=()=>openEditor(null);
+document.getElementById('exportBtn').onclick=()=>{
+  const blob=new Blob([JSON.stringify({answers:state.answers},null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);const a=document.createElement('a');
+  const d=new Date();const stamp=d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0');
+  a.href=url;a.download='面试练习备份-'+stamp+'.json';a.click();URL.revokeObjectURL(url);
+};
+document.getElementById('importBtn').onclick=()=>document.getElementById('importFile').click();
+document.getElementById('importFile').onchange=e=>{
+  const file=e.target.files[0];if(!file)return;
+  const rd=new FileReader();
+  rd.onload=()=>{
+    try{
+      const d=JSON.parse(rd.result);
+      const imported=(d.answers||d||[]).filter(x=>x&&x.fullText!==undefined);
+      if(!imported.length){alert('这个文件里没有找到可导入的回答。');return;}
+      if(confirm('导入 '+imported.length+' 条。选「确定」追加到现有内容，选「取消」则替换全部。')){
+        imported.forEach(x=>{x.id=uid();state.answers.push(x);});
+      }else{
+        state.answers=imported.map(x=>({...x,id:uid()}));
+      }
+      state.selectedId=state.answers[0].id;save();renderAll();
+    }catch(err){alert('读取失败：文件不是有效的 JSON。');}
+  };
+  rd.readAsText(file);
+  e.target.value='';
+};
+
+/* ============================================================
+   Boot
+   ============================================================ */
+load();renderAll();
+</script>
+</body>
+</html>
