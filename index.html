@@ -192,6 +192,14 @@
     max-width:none;overflow:visible;white-space:normal;color:var(--muted);border-bottom-color:var(--line);
   }
   .blank.revealed .bt,.card.reveal-blanks .blank .bt{visibility:visible;}
+  /* per-sentence reveal dot */
+  .sbtn{border:none;background:none;cursor:pointer;font-family:var(--sans);
+        color:var(--faint);padding:0 4px;margin-left:3px;font-size:.6em;
+        vertical-align:.55em;line-height:1;border-radius:6px;}
+  .sbtn::before{content:"○";}
+  .sbtn.on::before{content:"●";}
+  .sbtn:hover{color:var(--ink);background:var(--hover);}
+  .sbtn.on{color:var(--phr-ink);}
   @media (forced-colors:active){
     .blank{border-bottom-width:2px;}
   }
@@ -267,6 +275,7 @@
     .qitem{margin-bottom:6px;}
     .cnt button{width:24px;height:24px;font-size:14px;}
     .cnt-n{font-size:12.5px;min-width:20px;}
+    .sbtn{font-size:.72em;padding:3px 6px;}
     .ghead .gbtn{visibility:visible;}
     /* main content */
     .main-inner{padding:20px 14px 70px;}
@@ -506,6 +515,16 @@ function renderFull(text){
   return text.split(/\n{2,}/).map(p=>'<p>'+spacesToHtml(p)+'</p>').join('');
 }
 
+function sentenceSpans(text){
+  // sentence ends at . ! ? (plus closing quotes/brackets) followed by whitespace or EOL;
+  // decimals like 4.5 don't split because no whitespace follows the dot
+  const spans=[];let start=0;
+  const re=/[.!?]+["'\u201D\u2019)\]]*(?=\s|$)/g;let m;
+  while((m=re.exec(text))){const end=m.index+m[0].length;spans.push({start,end});start=end;}
+  if(start<text.length)spans.push({start,end:text.length});
+  return spans;
+}
+
 function renderMasked(text,items){
   // owner map: first-wins
   const owner=new Int16Array(text.length).fill(-1);
@@ -517,13 +536,12 @@ function renderMasked(text,items){
     while((m=re.exec(text))){paras.push([last,m.index]);last=m.index+m[0].length;}
     paras.push([last,text.length]);
   }
+  const sents=sentenceSpans(text);
   const seen=new Set();
-  let html='';
-  for(const [ps,pe] of paras){
-    if(pe<=ps){continue;}
-    let seg='',i=ps;
-    while(i<pe){
-      const o=owner[i];let j=i+1;while(j<pe&&owner[j]===o)j++;
+  function emitRange(rs,re2,sIdx,st){ // render one owner-chunk walk over [rs,re2)
+    let seg='',i=rs;
+    while(i<re2){
+      const o=owner[i];let j=i+1;while(j<re2&&owner[j]===o)j++;
       const chunk=text.slice(i,j);
       if(o>=0){
         const it=items[o];
@@ -539,12 +557,27 @@ function renderMasked(text,items){
             seg+=escHtml(core); // punctuation only: keep visible as glue
           }else{
             const w=Math.min(Math.max(core.replace(/\s+/g,' ').length,2),8);
-            seg+='<span class="blank" style="--w:'+w+'ch"><span class="bt">'+escHtml(core)+'</span></span>';
+            seg+='<span class="blank" style="--w:'+w+'ch" data-s="'+sIdx+'"><span class="bt">'+escHtml(core)+'</span></span>';
+            st.hasBlank=true;
           }
         }
         seg+=spacesToHtml(trail);
       }
       i=j;
+    }
+    return seg;
+  }
+  let html='';
+  for(const [ps,pe] of paras){
+    if(pe<=ps){continue;}
+    let seg='';
+    for(let s=0;s<sents.length;s++){
+      const ss=Math.max(sents[s].start,ps), se=Math.min(sents[s].end,pe);
+      if(se<=ss)continue;
+      const st={hasBlank:false};
+      seg+=emitRange(ss,se,s,st);
+      if(st.hasBlank)
+        seg+='<button class="sbtn" data-s="'+s+'" title="显示/隐藏本句被挖空的内容" aria-label="显示或隐藏本句被挖空的内容"></button>';
     }
     html+='<p>'+seg+'</p>';
   }
@@ -684,9 +717,23 @@ function renderMain(){
   // card interactions (delegated)
   const card=document.getElementById('practiceCard');
   if(card){
+    const syncDot=s=>{
+      const sb=card.querySelector('.sbtn[data-s="'+s+'"]');if(!sb)return;
+      const blanks=card.querySelectorAll('.blank[data-s="'+s+'"]');
+      sb.classList.toggle('on',[...blanks].every(b=>b.classList.contains('revealed')));
+    };
     card.addEventListener('click',e=>{
+      const sb=e.target.closest('.sbtn');
+      if(sb){
+        const s=sb.dataset.s;
+        const blanks=card.querySelectorAll('.blank[data-s="'+s+'"]');
+        const allRev=[...blanks].every(b=>b.classList.contains('revealed'));
+        blanks.forEach(b=>b.classList.toggle('revealed',!allRev));
+        sb.classList.toggle('on',!allRev);
+        return;
+      }
       const bl=e.target.closest('.blank');
-      if(bl){bl.classList.toggle('revealed');return;}
+      if(bl){bl.classList.toggle('revealed');syncDot(bl.dataset.s);return;}
       const hl=e.target.closest('.hl');
       if(hl){hl.classList.toggle('pinned');}
     });
