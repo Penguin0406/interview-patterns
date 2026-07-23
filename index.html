@@ -109,7 +109,14 @@
   }
   .qitem:hover{background:var(--hover);}
   .qitem.active{background:var(--card-hi);border-color:var(--line-strong);}
-  .qitem-title{font-weight:500;font-size:14.5px;line-height:1.35;}
+  .qitem-top{display:flex;align-items:flex-start;gap:6px;}
+  .qitem-title{font-weight:500;font-size:14.5px;line-height:1.35;flex:1;min-width:0;}
+  .star{border:none;background:none;cursor:pointer;padding:0 2px;line-height:1;
+        font-size:15px;color:var(--faint);flex:0 0 auto;border-radius:5px;}
+  .star::before{content:"☆";}
+  .star.on::before{content:"★";}
+  .star:hover{color:var(--ink);}
+  .star.on{color:var(--pat-ink);}
   .qitem-meta{font-family:var(--mono);font-size:10.5px;color:var(--muted);margin-top:6px;letter-spacing:.3px;
               display:flex;align-items:center;gap:4px;}
   .qitem-meta b{color:var(--pat-ink);font-weight:500;}
@@ -436,7 +443,7 @@ function matchPattern(text,pat){
    State + storage
    ============================================================ */
 const LS_KEY='interview_practice_v1';
-let state={answers:[],selectedId:null,mode:'full',showZh:false,revealAll:false,collapsed:[]};
+let state={answers:[],selectedId:null,mode:'full',showZh:false,revealAll:false,openGroup:null};
 
 function uid(){return 'a'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
 
@@ -485,14 +492,18 @@ function load(){
     const raw=localStorage.getItem(LS_KEY);
     if(raw){const d=JSON.parse(raw);state.answers=d.answers||[];state.selectedId=d.selectedId||null;
       if('showZh'in d)state.showZh=d.showZh;
-      if(Array.isArray(d.collapsed))state.collapsed=d.collapsed;}
+      if('openGroup'in d)state.openGroup=d.openGroup;}
   }catch(e){}
   if(!state.answers.length)state.answers=seedData();
   if(!state.selectedId||!state.answers.find(a=>a.id===state.selectedId))
     state.selectedId=state.answers[0]?state.answers[0].id:null;
+  if(state.openGroup===null){
+    const sel=state.answers.find(a=>a.id===state.selectedId);
+    if(sel)state.openGroup=groupOf(sel);
+  }
 }
 function save(){
-  try{localStorage.setItem(LS_KEY,JSON.stringify({answers:state.answers,selectedId:state.selectedId,showZh:state.showZh,collapsed:state.collapsed}));}catch(e){}
+  try{localStorage.setItem(LS_KEY,JSON.stringify({answers:state.answers,selectedId:state.selectedId,showZh:state.showZh,openGroup:state.openGroup}));}catch(e){}
 }
 
 /* ============================================================
@@ -591,31 +602,75 @@ const mainInner=document.getElementById('mainInner');
 const qlist=document.getElementById('qlist');
 
 const UNGROUPED='未分组';
+const FAV='收藏';
 function groupOf(a){return (a.group||'').trim()||UNGROUPED;}
 function allGroups(){
-  const s=[];state.answers.forEach(a=>{const g=groupOf(a);if(g!==UNGROUPED&&!s.includes(g))s.push(g);});return s;
+  const s=[];state.answers.forEach(a=>{const g=groupOf(a);if(g!==UNGROUPED&&g!==FAV&&!s.includes(g))s.push(g);});return s;
+}
+function closeDrawer(){
+  document.querySelector('.side').classList.remove('open');
+  const lt=document.getElementById('listToggle');if(lt)lt.setAttribute('aria-expanded','false');
+}
+// One answer object can be rendered in two places (its own group and 收藏).
+// Both nodes point at the same object, so edits and counts are shared by construction.
+function buildCard(a){
+  if(typeof a.reviews!=='number')a.reviews=0;
+  const el=document.createElement('div');
+  el.className='qitem'+(a.id===state.selectedId?' active':'');
+  el.dataset.id=a.id;
+  el.tabIndex=0;
+  el.innerHTML='<div class="qitem-top">'+
+      '<div class="qitem-title">'+escHtml(a.title||'（未命名）')+'</div>'+
+      '<button class="star'+(a.fav?' on':'')+'" aria-label="收藏或取消收藏"></button>'+
+    '</div>'+
+    '<div class="qitem-meta">句型 <b>'+(a.patterns||[]).length+'</b> · 短语 <i>'+(a.phrases||[]).length+'</i>'+
+    '<span class="cnt">'+
+    '<button data-d="-1" aria-label="减少复习次数">−</button>'+
+    '<span class="cnt-n">'+a.reviews+'</span>'+
+    '<button data-d="1" aria-label="增加复习次数">+</button></span></div>';
+  el.querySelector('.star').onclick=e=>{
+    e.stopPropagation();
+    a.fav=!a.fav;
+    if(a.fav)state.openGroup=FAV;
+    save();renderSidebar();
+  };
+  el.querySelectorAll('.cnt button').forEach(b=>{
+    b.onclick=e=>{
+      e.stopPropagation();
+      a.reviews=Math.max(0,(a.reviews||0)+parseInt(b.dataset.d,10));
+      // the same card may be on screen twice; update every copy
+      qlist.querySelectorAll('.qitem[data-id="'+a.id+'"] .cnt-n').forEach(n=>{n.textContent=a.reviews;});
+      save();
+    };
+  });
+  el.onclick=()=>{state.selectedId=a.id;save();renderAll();closeDrawer();};
+  el.onkeydown=e=>{if((e.key==='Enter'||e.key===' ')&&e.target===el){e.preventDefault();el.click();}};
+  return el;
 }
 function renderSidebar(){
+  const scroll=qlist.scrollTop;
   qlist.innerHTML='';
   const groups=new Map();
   state.answers.forEach(a=>{const g=groupOf(a);if(!groups.has(g))groups.set(g,[]);groups.get(g).push(a);});
-  // named groups in first-appearance order, 未分组 last
   const names=[...groups.keys()].filter(g=>g!==UNGROUPED);
   if(groups.has(UNGROUPED))names.push(UNGROUPED);
-  for(const gname of names){
-    const list=groups.get(gname);
-    const isCollapsed=state.collapsed.includes(gname);
-    if(names.length>1||gname!==UNGROUPED){
+  const favs=state.answers.filter(a=>a.fav);
+  const sections=[];
+  if(favs.length)sections.push({name:FAV,list:favs,virtual:true});
+  names.forEach(n=>sections.push({name:n,list:groups.get(n),virtual:false}));
+  const headerless=(sections.length===1&&sections[0].name===UNGROUPED);
+  for(const sec of sections){
+    const gname=sec.name,list=sec.list;
+    const isOpen=headerless||state.openGroup===gname;
+    if(!headerless){
       const gh=document.createElement('div');
-      gh.className='ghead'+(isCollapsed?' closed':'');
+      gh.className='ghead'+(isOpen?'':' closed');
       gh.tabIndex=0;
-      gh.innerHTML='<span class="chev">⌄</span><span class="gname">'+escHtml(gname)+'</span><span class="gcount">'+list.length+'</span>'+
-        (gname!==UNGROUPED?'<button class="gbtn" title="重命名或解散分组">✎</button>':'');
-      const toggle=()=>{
-        const i=state.collapsed.indexOf(gname);
-        if(i>=0)state.collapsed.splice(i,1);else state.collapsed.push(gname);
-        save();renderSidebar();
-      };
+      gh.innerHTML='<span class="chev">⌄</span><span class="gname">'+(sec.virtual?'★ ':'')+escHtml(gname)+'</span>'+
+        '<span class="gcount">'+list.length+'</span>'+
+        (sec.virtual||gname===UNGROUPED?'':'<button class="gbtn" title="重命名或解散分组">✎</button>');
+      // accordion: opening one group closes whatever else was open
+      const toggle=()=>{state.openGroup=isOpen?null:gname;save();renderSidebar();};
       gh.onclick=toggle;
       gh.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();toggle();}};
       const btn=gh.querySelector('.gbtn');
@@ -624,41 +679,15 @@ function renderSidebar(){
         if(nn===null)return;
         const newName=nn.trim();
         state.answers.forEach(a=>{if(groupOf(a)===gname)a.group=newName;});
-        const ci=state.collapsed.indexOf(gname);
-        if(ci>=0){state.collapsed.splice(ci,1);if(newName)state.collapsed.push(newName);}
+        if(state.openGroup===gname)state.openGroup=newName||null;
         save();renderAll();
       };
       qlist.appendChild(gh);
     }
-    if(isCollapsed&&(names.length>1||gname!==UNGROUPED))continue;
-    list.forEach(a=>{
-      if(typeof a.reviews!=='number')a.reviews=0;
-      const el=document.createElement('div');
-      el.className='qitem'+(a.id===state.selectedId?' active':'');
-      el.tabIndex=0;
-      el.innerHTML='<div class="qitem-title">'+escHtml(a.title||'（未命名）')+'</div>'+
-        '<div class="qitem-meta">句型 <b>'+(a.patterns||[]).length+'</b> · 短语 <i>'+(a.phrases||[]).length+'</i>'+
-        '<span class="cnt">'+
-        '<button data-d="-1" aria-label="减少复习次数">−</button>'+
-        '<span class="cnt-n">'+a.reviews+'</span>'+
-        '<button data-d="1" aria-label="增加复习次数">+</button></span></div>';
-      // counter buttons: update in place, never select the card or re-render (keeps scroll position)
-      el.querySelectorAll('.cnt button').forEach(b=>{
-        b.onclick=e=>{
-          e.stopPropagation();
-          a.reviews=Math.max(0,(a.reviews||0)+parseInt(b.dataset.d,10));
-          el.querySelector('.cnt-n').textContent=a.reviews;
-          save();
-        };
-      });
-      el.onclick=()=>{state.selectedId=a.id;save();renderAll();
-        document.querySelector('.side').classList.remove('open');
-        const lt=document.getElementById('listToggle');if(lt)lt.setAttribute('aria-expanded','false');
-      };
-      el.onkeydown=e=>{if((e.key==='Enter'||e.key===' ')&&e.target===el){e.preventDefault();el.click();}};
-      qlist.appendChild(el);
-    });
+    if(!isOpen)continue;
+    list.forEach(a=>qlist.appendChild(buildCard(a)));
   }
+  qlist.scrollTop=scroll;
 }
 
 function renderMain(){
@@ -790,8 +819,7 @@ document.getElementById('saveBtn').onclick=()=>{
     const na={id:uid(),title:title||'（未命名）',group,patterns,phrases,fullText};
     state.answers.push(na);state.selectedId=na.id;
   }
-  const gi=state.collapsed.indexOf(group||UNGROUPED);
-  if(gi>=0)state.collapsed.splice(gi,1); // saving into a collapsed group re-opens it so the card stays visible
+  state.openGroup=group||UNGROUPED; // keep the saved card visible
   save();closeEditor();renderAll();
 };
 document.getElementById('deleteBtn').onclick=()=>{if(editingId){deleteAnswer(editingId,true);closeEditor();}};
