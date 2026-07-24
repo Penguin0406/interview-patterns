@@ -1139,8 +1139,20 @@ document.getElementById('importFile').onchange=e=>{
       const d=JSON.parse(rd.result);
       const imported=(d.answers||d||[]).filter(x=>x&&x.fullText!==undefined);
       if(!imported.length){alert('这个文件里没有找到可导入的回答。');return;}
-      if(confirm('导入 '+imported.length+' 条。选「确定」追加到现有内容，选「取消」则替换全部。')){
-        imported.forEach(x=>{x.id=uid();state.answers.push(x);});
+      if(confirm('导入 '+imported.length+' 条。选「确定」合并到现有内容（同名卡片会被导入的版本覆盖），选「取消」则替换全部。')){
+        let added=0,updated=0;
+        imported.forEach(x=>{
+          const t=(x.title||'').trim();
+          const ex=t?state.answers.find(a=>(a.title||'').trim()===t):null;
+          if(ex){
+            // same title: overwrite in place, keep the local card's id and position
+            Object.keys(x).forEach(k=>{if(k!=='id')ex[k]=x[k];});
+            updated++;
+          }else{
+            x.id=uid();state.answers.push(x);added++;
+          }
+        });
+        alert('导入完成：覆盖 '+updated+' 张同名卡片，新增 '+added+' 张。');
       }else{
         state.answers=imported.map(x=>({...x,id:uid()}));
       }
