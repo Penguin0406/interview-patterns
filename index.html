@@ -243,6 +243,10 @@
           max-width:680px;margin:0 auto;padding:10px 12px;background:var(--card);
           border:1px solid var(--line-strong);border-radius:12px;}
   .player[hidden]{display:none;}
+  .pnav{border:1px solid var(--line-strong);background:var(--card-hi);color:var(--muted);
+        width:28px;height:28px;border-radius:50%;flex:0 0 auto;cursor:pointer;font-size:14px;
+        display:inline-flex;align-items:center;justify-content:center;padding:0;line-height:1;}
+  .pnav:hover{color:var(--ink);border-color:var(--faint);}
   .pbtn{border:1px solid var(--line-strong);background:var(--card-hi);color:var(--ink);
         width:34px;height:34px;border-radius:50%;flex:0 0 auto;cursor:pointer;font-size:12px;
         display:inline-flex;align-items:center;justify-content:center;}
@@ -337,7 +341,10 @@
             box-shadow:0 4px 18px rgba(0,0,0,.22);}
     body.player-on .main-inner{padding-bottom:150px;}
     .ptext{display:none;}
-    .ptime{font-size:10px;}
+    .ptime{display:none;}
+    .pnav{width:26px;height:26px;font-size:13px;}
+    .pregen{padding:4px 7px;}
+    .player{gap:6px;}
     .ghead .gbtn{visibility:visible;}
     /* main content */
     .main-inner{padding:20px 14px 70px;}
@@ -387,7 +394,10 @@
     <div class="main-inner" id="mainInner"></div>
   
 <div class="player" id="player" hidden>
+  <button class="pnav" id="pPrev" title="上一句" aria-label="播放上一句">«</button>
   <button class="pbtn" id="pPlay" aria-label="播放或暂停"></button>
+  <button class="pnav" id="pNext" title="下一句" aria-label="播放下一句">»</button>
+  <button class="pnav" id="pReplay" title="从头重播" aria-label="从头重播">⟲</button>
   <div class="pmid">
     <div class="ptext" id="pText"></div>
     <input type="range" id="pSeek" min="0" max="1000" value="0" step="1" aria-label="播放进度">
@@ -1279,7 +1289,7 @@ async function fetchTTS(text,cfg){
 
 /* ---- player ---- */
 const audio=new Audio();
-let curUrl=null,curKey=null,curBtn=null,seeking=false;
+let curUrl=null,curKey=null,curBtn=null,seeking=false,lastText=null;
 const $=id=>document.getElementById(id);
 function fmt(t){if(!isFinite(t))return '0:00';const m=Math.floor(t/60),s=Math.floor(t%60);return m+':'+String(s).padStart(2,'0');}
 function updTime(){
@@ -1295,7 +1305,26 @@ $('pPlay').onclick=()=>{if(audio.paused)audio.play().catch(()=>{});else audio.pa
 $('pSeek').addEventListener('input',()=>{seeking=true;if(audio.duration)$('pTime').textContent=fmt($('pSeek').value/1000*audio.duration)+' / '+fmt(audio.duration);});
 $('pSeek').addEventListener('change',()=>{if(audio.duration)audio.currentTime=$('pSeek').value/1000*audio.duration;seeking=false;});
 $('pClose').onclick=()=>{audio.pause();$('player').hidden=true;document.body.classList.remove('player-on');if(curBtn)curBtn.classList.remove('playing');};
-$('pRegen').onclick=()=>{if(curBtn)playSentence(curBtn,true);};
+$('pRegen').onclick=()=>{const b=currentAudioBtn();if(b)playSentence(b,true);};
+// prev / next walk the audio segments in reading order; missing clips are generated on the fly
+function allAudioBtns(){return [...mainInner.querySelectorAll('.abtn')];}
+function currentAudioBtn(){
+  if(curBtn&&curBtn.isConnected)return curBtn;
+  if(lastText==null)return null;
+  return allAudioBtns().find(b=>b.dataset.t===lastText)||null; // mode switch rebuilt the DOM: relocate by text
+}
+function stepAudio(dir){
+  const list=allAudioBtns();if(!list.length)return;
+  const cur=currentAudioBtn();
+  const idx=cur?list.indexOf(cur):-1;
+  let target;
+  if(idx<0)target=dir>0?list[0]:list[list.length-1];
+  else{const ni=idx+dir;if(ni<0||ni>=list.length)return;target=list[ni];}
+  playSentence(target,false);
+}
+$('pPrev').onclick=()=>stepAudio(-1);
+$('pNext').onclick=()=>stepAudio(1);
+$('pReplay').onclick=()=>{if(audio.src){audio.currentTime=0;audio.play().catch(()=>{});}};
 
 function loadBlob(blob,label){
   if(curUrl)URL.revokeObjectURL(curUrl);
@@ -1308,6 +1337,7 @@ function loadBlob(blob,label){
 }
 async function playSentence(btn,force){
   const text=btn.dataset.t,cfg=getCfg(),k=clipKey(text,cfg);
+  lastText=text;
   // same clip already loaded: just toggle
   if(!force&&curKey===k&&audio.src){ if(audio.paused)audio.play().catch(()=>{}); else audio.pause(); return; }
   if(curBtn&&curBtn!==btn)curBtn.classList.remove('playing');
