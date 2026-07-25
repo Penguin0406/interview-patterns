@@ -644,7 +644,7 @@ function computeItems(answer,kind){
 }
 
 function renderFull(text){
-  const sents=sentenceSpans(text);
+  const segs=ttsSegments(text);
   const paras=[];{
     let re=/\n{2,}/g,last=0,m;
     while((m=re.exec(text))){paras.push([last,m.index]);last=m.index+m[0].length;}
@@ -653,17 +653,17 @@ function renderFull(text){
   let html='';
   for(const [ps,pe] of paras){
     if(pe<=ps)continue;
-    let seg='';
-    for(let s=0;s<sents.length;s++){
-      const ss=Math.max(sents[s].start,ps),se=Math.min(sents[s].end,pe);
+    let out='';
+    for(const g of segs){
+      const ss=Math.max(g.start,ps),se=Math.min(g.end,pe);
       if(se<=ss)continue;
       const raw=text.slice(ss,se);
-      seg+=spacesToHtml(raw);
+      out+=spacesToHtml(raw);
       const stext=raw.trim();
       if(stext.replace(/[^A-Za-z\u00C0-\u017F]/g,'').length>1)
-        seg+='<button class="abtn" data-s="'+s+'" data-t="'+escAttr(stext)+'" title="朗读这句" aria-label="朗读这句"></button>';
+        out+='<button class="abtn" data-t="'+escAttr(stext)+'" title="朗读这一段" aria-label="朗读这一段"></button>';
     }
-    html+='<p>'+seg+'</p>';
+    html+='<p>'+out+'</p>';
   }
   return html;
 }
@@ -676,6 +676,35 @@ function sentenceSpans(text){
   while((m=re.exec(text))){const end=m.index+m[0].length;spans.push({start,end});start=end;}
   if(start<text.length)spans.push({start,end:text.length});
   return spans;
+}
+
+function ttsSegments(text){
+  // clause-level audio segments: cut at , ; : as well as sentence ends;
+  // a clause of <=6 words merges into the following clause; a short final
+  // clause merges back into the previous segment
+  const out=[];
+  for(const sen of sentenceSpans(text)){
+    const seg=text.slice(sen.start,sen.end);
+    const cuts=[];const re=/[,;:]+(?=\s)/g;let m;
+    while((m=re.exec(seg))){cuts.push(m.index+m[0].length);}
+    const clauses=[];let last=0;
+    for(const c of cuts){clauses.push([last,c]);last=c;}
+    clauses.push([last,seg.length]);
+    const wc=(a,b)=>seg.slice(a,b).split(/\s+/).filter(w=>/[A-Za-z\u00C0-\u017F0-9]/.test(w)).length;
+    const merged=[];let bufStart=null;
+    for(let i=0;i<clauses.length;i++){
+      const [a,b]=clauses[i];
+      if(bufStart===null)bufStart=a;
+      const isLast=i===clauses.length-1;
+      if(wc(a,b)>6||isLast){
+        if(isLast&&wc(bufStart,b)<=6&&merged.length){merged[merged.length-1][1]=b;}
+        else merged.push([bufStart,b]);
+        bufStart=null;
+      }
+    }
+    for(const [a,b] of merged)out.push({start:sen.start+a,end:sen.start+b});
+  }
+  return out;
 }
 
 function renderMasked(text,items){
@@ -724,16 +753,24 @@ function renderMasked(text,items){
   for(const [ps,pe] of paras){
     if(pe<=ps){continue;}
     let seg='';
+    const allSegs=ttsSegments(text);
     for(let s=0;s<sents.length;s++){
       const ss=Math.max(sents[s].start,ps), se=Math.min(sents[s].end,pe);
       if(se<=ss)continue;
       const st={hasBlank:false};
-      seg+=emitRange(ss,se,s,st);
-      const stext=text.slice(sents[s].start,sents[s].end).trim();
-      if(st.hasBlank)
-        seg+='<button class="sbtn" data-s="'+s+'" title="显示/隐藏本句被挖空的内容" aria-label="显示或隐藏本句被挖空的内容"></button>';
-      if(stext.replace(/[^A-Za-z\u00C0-\u017F]/g,'').length>1)
-        seg+='<button class="abtn" data-s="'+s+'" data-t="'+escAttr(stext)+'" title="朗读这句" aria-label="朗读这句"></button>';
+      let mySegs=allSegs.filter(g=>g.start>=sents[s].start&&g.end<=sents[s].end);
+      if(!mySegs.length)mySegs=[{start:sents[s].start,end:sents[s].end}];
+      for(let gi=0;gi<mySegs.length;gi++){
+        const gs=Math.max(mySegs[gi].start,ps),ge=Math.min(mySegs[gi].end,pe);
+        if(ge<=gs)continue;
+        seg+=emitRange(gs,ge,s,st);
+        const isLastSeg=gi===mySegs.length-1;
+        if(isLastSeg&&st.hasBlank)
+          seg+='<button class="sbtn" data-s="'+s+'" title="显示/隐藏本句被挖空的内容" aria-label="显示或隐藏本句被挖空的内容"></button>';
+        const stext=text.slice(mySegs[gi].start,mySegs[gi].end).trim();
+        if(stext.replace(/[^A-Za-z\u00C0-\u017F]/g,'').length>1)
+          seg+='<button class="abtn" data-t="'+escAttr(stext)+'" title="朗读这一段" aria-label="朗读这一段"></button>';
+      }
     }
     html+='<p>'+seg+'</p>';
   }
