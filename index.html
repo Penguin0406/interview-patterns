@@ -269,6 +269,30 @@
            background-position:calc(100% - 17px) 19px,calc(100% - 12px) 19px;
            background-size:5px 5px,5px 5px;background-repeat:no-repeat;}
 
+  /* ---------- phrasebook ---------- */
+  .pb-card{padding:6px 24px 18px;font-family:var(--sans);font-size:15px;line-height:1.5;}
+  .pb-row{display:flex;align-items:flex-start;gap:9px;padding:13px 0;border-bottom:1px solid var(--line);}
+  .pb-row .abtn{font-size:15px;margin-top:4px;}
+  .pstar{border:none;background:none;cursor:pointer;padding:2px;line-height:1;
+         font-size:15px;color:var(--faint);margin-top:3px;border-radius:5px;flex:0 0 auto;}
+  .pstar::before{content:"☆";}
+  .pstar.on::before{content:"★";}
+  .pstar:hover{color:var(--ink);}
+  .pstar.on{color:var(--pat-ink);}
+  .pb-main{flex:1;min-width:0;}
+  .pb-en{font-family:var(--serif);font-size:17.5px;line-height:1.65;cursor:pointer;}
+  .pb-zh{font-family:var(--sans);font-size:13px;color:var(--muted);margin-top:4px;line-height:1.55;}
+  .pb-act{border:none;background:none;color:var(--faint);cursor:pointer;font-size:13px;
+          padding:3px 6px;border-radius:6px;margin-top:3px;flex:0 0 auto;}
+  .pb-act:hover{color:var(--ink);background:var(--hover);}
+  .pb-add{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap;}
+  .pb-add input{flex:1;min-width:150px;}
+  .pb-empty{padding:26px 0 12px;color:var(--muted);font-size:13.5px;}
+  .pb-hint{font-size:12px;color:var(--muted);margin:12px 2px 0;}
+  .daily-zone{margin-bottom:10px;background:var(--card-hi);border-color:var(--line);}
+  .daily-zone .qitem-title{font-family:var(--serif);font-size:15.5px;font-weight:600;}
+  .daily-count{font-family:var(--mono);font-size:11px;color:var(--muted);}
+
   /* ---------- buttons ---------- */
   .btn{
     border:1px solid var(--line-strong);background:var(--card);border-radius:9px;
@@ -344,6 +368,9 @@
     .ptime{display:none;}
     .pnav{width:26px;height:26px;font-size:13px;}
     .pregen{padding:4px 7px;}
+    .pb-card{padding:4px 15px 14px;}
+    .pb-en{font-size:16px;}
+    .pb-add input{min-width:120px;}
     .player{gap:6px;}
     .ghead .gbtn{visibility:visible;}
     /* main content */
@@ -471,7 +498,14 @@
       <button class="btn ghost" id="closeModal" aria-label="关闭">✕</button>
     </div>
     <div class="modal-body">
-      <details class="quick">
+      <div class="field" id="typeField">
+        <label>类型</label>
+        <div class="seg">
+          <button type="button" id="typeCard" class="on">面试回答</button>
+          <button type="button" id="typePhr">日常用语</button>
+        </div>
+      </div>
+      <details class="quick" id="quickPaste">
         <summary>快速粘贴（按你的原格式一次填入）</summary>
         <div class="qbody">
           <textarea class="f" id="pasteBox" rows="7" placeholder="把「问题 / **句型** / **短语** / 回答全文」整段粘进来，点下面的按钮自动拆分填入。"></textarea>
@@ -479,27 +513,36 @@
         </div>
       </details>
 
-      <div class="field">
+      <div class="field" id="titleField">
         <label>标题</label>
         <input class="f" id="fTitle" placeholder="例：Sonio GTM 介绍">
       </div>
-      <div class="field">
+      <div class="field" id="groupField">
         <label>分组</label>
         <div class="desc">输入新名称即创建分组，选已有名称即归入该组，留空则放在「未分组」。</div>
         <input class="f" id="fGroup" list="groupList" placeholder="例：实习总体介绍">
         <datalist id="groupList"></datalist>
       </div>
-      <div class="field">
+      <div class="field" id="dailyTextField" style="display:none">
+        <label>内容</label>
+        <div class="desc">一句话或一段话都可以。</div>
+        <textarea class="f" id="fDailyText" rows="4"></textarea>
+      </div>
+      <div class="field" id="dailyZhField" style="display:none">
+        <label>中文</label>
+        <input class="f" id="fDailyZh" placeholder="可留空">
+      </div>
+      <div class="field" id="patField">
         <label>句型（每行一个）</label>
         <div class="desc">格式：<code>English text (中文)</code>，用 <code>...</code> 表示可替换的空位。中文可留空。</div>
         <textarea class="f" id="fPatterns" rows="6" placeholder="... is a SaaS company in a pretty niche ... space (...是一家处于相当小众...领域的 SaaS 公司)"></textarea>
       </div>
-      <div class="field">
+      <div class="field" id="phrField">
         <label>短语（每行一个）</label>
         <div class="desc">格式：<code>English (中文)</code>。中文可留空。</div>
         <textarea class="f" id="fPhrases" rows="6" placeholder="go-to-market motion (市场进入打法)"></textarea>
       </div>
-      <div class="field">
+      <div class="field" id="fullField">
         <label>回答全文</label>
         <textarea class="f" id="fFull" rows="8" placeholder="粘贴完整回答。段落之间空一行即可。"></textarea>
       </div>
@@ -574,7 +617,7 @@ function matchPattern(text,pat){
    State + storage
    ============================================================ */
 const LS_KEY='interview_practice_v1';
-let state={answers:[],selectedId:null,mode:'full',showZh:false,revealAll:false,openGroup:null};
+let state={answers:[],selectedId:null,mode:'full',showZh:false,revealAll:false,openGroup:null,pbShowZh:false,pbFavOnly:false,daily:[],dailyOpen:null};
 
 function uid(){return 'a'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
 
@@ -618,23 +661,42 @@ function seedData(){
   }];
 }
 
+function migratePhrasebooks(){
+  // earlier trial version stored 日常用语 as phrasebook cards with items[];
+  // convert each sentence into a standalone daily entry
+  let changed=false;
+  state.answers=state.answers.filter(a=>{
+    if(a&&a.type==='phrasebook'){
+      (a.items||[]).forEach(it=>state.daily.push({id:uid(),fullText:it.en||'',zh:it.zh||'',patterns:[],phrases:[],fav:!!it.fav}));
+      if(state.selectedId===a.id)state.selectedId='__daily__';
+      changed=true;return false;
+    }
+    return true;
+  });
+  return changed;
+}
 function load(){
   try{
     const raw=localStorage.getItem(LS_KEY);
     if(raw){const d=JSON.parse(raw);state.answers=d.answers||[];state.selectedId=d.selectedId||null;
       if('showZh'in d)state.showZh=d.showZh;
-      if('openGroup'in d)state.openGroup=d.openGroup;}
+      if('openGroup'in d)state.openGroup=d.openGroup;
+      if('pbShowZh'in d)state.pbShowZh=d.pbShowZh;
+      if('pbFavOnly'in d)state.pbFavOnly=d.pbFavOnly;
+      if(Array.isArray(d.daily))state.daily=d.daily;
+      if('dailyOpen'in d)state.dailyOpen=d.dailyOpen;}
   }catch(e){}
-  if(!state.answers.length)state.answers=seedData();
-  if(!state.selectedId||!state.answers.find(a=>a.id===state.selectedId))
-    state.selectedId=state.answers[0]?state.answers[0].id:null;
+  if(!state.answers.length&&!state.daily.length)state.answers=seedData();
+  migratePhrasebooks();
+  if(state.selectedId!=='__daily__'&&(!state.selectedId||!state.answers.find(a=>a.id===state.selectedId)))
+    state.selectedId=state.answers[0]?state.answers[0].id:(state.daily.length?'__daily__':null);
   if(state.openGroup===null){
     const sel=state.answers.find(a=>a.id===state.selectedId);
     if(sel)state.openGroup=groupOf(sel);
   }
 }
 function save(){
-  try{localStorage.setItem(LS_KEY,JSON.stringify({answers:state.answers,selectedId:state.selectedId,showZh:state.showZh,openGroup:state.openGroup}));}catch(e){}
+  try{localStorage.setItem(LS_KEY,JSON.stringify({answers:state.answers,selectedId:state.selectedId,showZh:state.showZh,openGroup:state.openGroup,pbShowZh:state.pbShowZh,pbFavOnly:state.pbFavOnly,daily:state.daily,dailyOpen:state.dailyOpen}));}catch(e){}
 }
 
 /* ============================================================
@@ -894,6 +956,14 @@ function buildCard(a,inFav){
 function renderSidebar(){
   const scroll=qlist.scrollTop;
   qlist.innerHTML='';
+  // fixed 日常用语 zone pinned above all groups
+  const dq=document.createElement('div');
+  dq.className='qitem daily-zone'+(state.selectedId==='__daily__'?' active':'');
+  dq.tabIndex=0;
+  dq.innerHTML='<div class="qitem-top"><div class="qitem-title">日常用语</div><span class="daily-count">'+state.daily.length+'</span></div>';
+  dq.onclick=()=>{state.selectedId='__daily__';state.dailyOpen=null;save();renderAll();closeDrawer();};
+  dq.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();dq.click();}};
+  qlist.appendChild(dq);
   const groups=new Map();
   state.answers.forEach(a=>{const g=groupOf(a);if(!groups.has(g))groups.set(g,[]);groups.get(g).push(a);});
   const names=[...groups.keys()].filter(g=>g!==UNGROUPED);
@@ -939,7 +1009,88 @@ function renderSidebar(){
   qlist.scrollTop=scroll;
 }
 
+
+function dailyTitle(e){
+  const t=(e.fullText||'').replace(/\s+/g,' ').trim();
+  return t.length>46?t.slice(0,46).replace(/\s+\S*$/,'')+' …':t;
+}
+function deleteDaily(id,skip){
+  const e=state.daily.find(x=>x.id===id);if(!e)return;
+  if(!skip&&!confirm('删除这条日常用语？'))return;
+  state.daily=state.daily.filter(x=>x.id!==id);
+  if(state.dailyOpen===id)state.dailyOpen=null;
+  save();renderAll();
+}
+function renderDailyBoard(){
+  const shown=state.daily.filter(e=>!state.pbFavOnly||e.fav);
+  let rows='';
+  for(const e of shown){
+    const hasCloze=(e.patterns&&e.patterns.length)||(e.phrases&&e.phrases.length);
+    rows+='<div class="pb-row" data-id="'+e.id+'">'
+      +'<button class="abtn" data-t="'+escAttr(e.fullText||'')+'" title="朗读" aria-label="朗读"></button>'
+      +'<button class="pstar'+(e.fav?' on':'')+'" aria-label="收藏这条"></button>'
+      +'<div class="pb-main"><div class="pb-en">'+escHtml(dailyTitle(e))+'</div>'
+      +(e.zh?'<div class="pb-zh"'+(state.pbShowZh?'':' hidden')+'>'+escHtml(e.zh)+'</div>':'')
+      +'</div>'
+      +'<button class="pb-act pb-open" title="'+(hasCloze?'打开练习（含句型/短语挖空）':'打开练习')+'">›</button>'
+      +'<button class="pb-act pb-edit" title="编辑这条">✎</button>'
+      +'<button class="pb-act pb-del" title="删除这条">✕</button>'
+      +'</div>';
+  }
+  if(!shown.length)rows='<div class="pb-empty">'+(state.pbFavOnly?'还没有收藏的内容。':'还没有内容，用下面的输入框添加第一条。')+'</div>';
+  mainInner.innerHTML='<h1 class="ans-title">日常用语</h1>'
+    +'<div class="controls"><div class="aux" style="margin-left:0;">'
+    +'<button class="toggle'+(state.pbFavOnly?' on':'')+'" id="pbFav">只看收藏</button>'
+    +'<button class="toggle'+(state.pbShowZh?' on':'')+'" id="pbZh">显示中文</button>'
+    +'</div></div>'
+    +'<div class="card pb-card">'+rows
+    +'<div class="pb-add">'
+    +'<input class="f" id="pbEn" placeholder="外语句子或一段话">'
+    +'<input class="f" id="pbZh" placeholder="中文（可留空）">'
+    +'<button class="btn primary" id="pbAdd">添加</button>'
+    +'</div></div>'
+    +'<p class="pb-hint">点句子看中文，› 打开完整练习页；长内容的句型和短语在 ✎ 里选填。</p>';
+  document.getElementById('pbFav').onclick=()=>{state.pbFavOnly=!state.pbFavOnly;save();renderMain();};
+  document.getElementById('pbZh').onclick=()=>{state.pbShowZh=!state.pbShowZh;save();renderMain();};
+  const addRow=()=>{
+    const en=document.getElementById('pbEn').value.trim();
+    const zh=document.getElementById('pbZh').value.trim();
+    if(!en)return;
+    state.daily.push({id:uid(),fullText:en,zh,patterns:[],phrases:[],fav:false});
+    save();renderAll();
+    setTimeout(()=>{const el=document.getElementById('pbEn');if(el)el.focus();},30);
+  };
+  document.getElementById('pbAdd').onclick=addRow;
+  document.getElementById('pbEn').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();document.getElementById('pbZh').focus();}});
+  document.getElementById('pbZh').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();addRow();}});
+  const cardEl=mainInner.querySelector('.pb-card');
+  cardEl.addEventListener('click',e=>{
+    if(e.target.closest('.abtn'))return;   // shared audio listener handles playback
+    if(e.target.closest('.pb-add'))return;
+    const row=e.target.closest('.pb-row');if(!row)return;
+    const id=row.dataset.id;
+    const entry=state.daily.find(x=>x.id===id);if(!entry)return;
+    if(e.target.closest('.pstar')){entry.fav=!entry.fav;save();renderMain();return;}
+    if(e.target.closest('.pb-open')){state.dailyOpen=id;save();renderMain();return;}
+    if(e.target.closest('.pb-edit')){openDailyEditor(id);return;}
+    if(e.target.closest('.pb-del')){deleteDaily(id);return;}
+    if(e.target.closest('.pb-en')&&!state.pbShowZh){
+      const zhEl=row.querySelector('.pb-zh');
+      if(zhEl)zhEl.hidden=!zhEl.hidden;
+    }
+  });
+  if(typeof markCached==='function')markCached();
+}
+
 function renderMain(){
+  if(state.selectedId==='__daily__'){
+    if(state.dailyOpen){
+      const e=state.daily.find(x=>x.id===state.dailyOpen);
+      if(e){renderCardView(e,true);return;}
+      state.dailyOpen=null;
+    }
+    renderDailyBoard();return;
+  }
   const a=state.answers.find(x=>x.id===state.selectedId);
   if(!a){
     mainInner.innerHTML='<div class="empty"><h2>还没有内容</h2>'+
@@ -947,6 +1098,9 @@ function renderMain(){
       '<button class="btn primary" onclick="openEditor(null)">+ 新建第一条</button></div>';
     return;
   }
+  renderCardView(a,false);
+}
+function renderCardView(a,isDaily){
   const mode=state.mode;
   let bodyHtml,footHtml='';
   if(mode==='full'){
@@ -964,8 +1118,10 @@ function renderMain(){
   }
   const cardCls='card'+(state.showZh?' show-zh':'')+(state.revealAll?' reveal-blanks':'');
   mainInner.innerHTML=
-    (groupOf(a)!==UNGROUPED?'<div class="brand-sub" style="margin-bottom:6px;">'+escHtml(groupOf(a))+'</div>':'')+
-    '<h1 class="ans-title">'+escHtml(a.title||'（未命名）')+'</h1>'+
+    (isDaily
+      ?'<button class="linkbtn" id="dailyBack" style="margin-bottom:8px;">← 返回日常用语</button>'
+      :(groupOf(a)!==UNGROUPED?'<div class="brand-sub" style="margin-bottom:6px;">'+escHtml(groupOf(a))+'</div>':''))+
+    '<h1 class="ans-title">'+escHtml(isDaily?dailyTitle(a):(a.title||'（未命名）'))+'</h1>'+
     '<div class="controls">'+
       '<div class="seg">'+
         '<button data-m="full" class="'+(mode==='full'?'on':'')+'">全文</button>'+
@@ -978,7 +1134,7 @@ function renderMain(){
       '</div>'+
     '</div>'+
     '<div class="rowbtns">'+
-      '<button class="linkbtn" onclick="openEditor(state.selectedId)">编辑</button>'+
+      '<button class="linkbtn" id="editInline">编辑</button>'+
       '<button class="linkbtn danger" id="delInline">删除</button>'+
     '</div>'+
     '<div class="'+cardCls+'" id="practiceCard">'+bodyHtml+'</div>'+
@@ -990,7 +1146,10 @@ function renderMain(){
   });
   const tR=document.getElementById('tReveal'); if(tR)tR.onclick=()=>{state.revealAll=!state.revealAll;renderMain();};
   const tZ=document.getElementById('tZh'); if(tZ)tZ.onclick=()=>{state.showZh=!state.showZh;save();renderMain();};
-  document.getElementById('delInline').onclick=()=>deleteAnswer(a.id);
+  document.getElementById('editInline').onclick=()=>{isDaily?openDailyEditor(a.id):openEditor(a.id);};
+  document.getElementById('delInline').onclick=()=>{isDaily?deleteDaily(a.id):deleteAnswer(a.id);};
+  const db=document.getElementById('dailyBack');
+  if(db)db.onclick=()=>{state.dailyOpen=null;save();renderMain();};
 
   // card interactions (delegated)
   if(typeof markCached==='function')markCached();
@@ -1047,7 +1206,7 @@ function textToItems(txt){
 window.openEditor=function(id){
   editingId=id;
   const a=id?state.answers.find(x=>x.id===id):null;
-  document.getElementById('modalTitle').textContent=a?'编辑回答':'新建回答';
+  document.getElementById('modalTitle').textContent=a?'编辑回答':'新建';
   document.getElementById('fTitle').value=a?a.title:'';
   document.getElementById('fGroup').value=a?(a.group||''):'';
   document.getElementById('groupList').innerHTML=allGroups().map(g=>'<option value="'+escAttr(g)+'">').join('');
@@ -1055,16 +1214,62 @@ window.openEditor=function(id){
   document.getElementById('fPhrases').value=a?itemsToText(a.phrases):'';
   document.getElementById('fFull').value=a?a.fullText:'';
   document.getElementById('pasteBox').value='';
+  editingDailyId=null;
+  editType='card';
+  document.getElementById('typeField').style.display=a?'none':''; // type is fixed after creation
+  updateTypeUI();
   document.getElementById('deleteBtn').style.display=a?'inline-block':'none';
   const q=document.querySelector('details.quick'); if(q)q.open=!id;
   overlay.classList.add('show');
   setTimeout(()=>document.getElementById(id?'fTitle':'pasteBox').focus(),40);
 };
-function closeEditor(){overlay.classList.remove('show');editingId=null;}
+function closeEditor(){overlay.classList.remove('show');editingId=null;editingDailyId=null;}
+function openDailyEditor(id){
+  editingId=null;editingDailyId=id;editType='daily';
+  const e=id?state.daily.find(x=>x.id===id):null;
+  document.getElementById('modalTitle').textContent=e?'编辑日常用语':'新建日常用语';
+  document.getElementById('fDailyText').value=e?(e.fullText||''):'';
+  document.getElementById('fDailyZh').value=e?(e.zh||''):'';
+  document.getElementById('fPatterns').value=e?itemsToText(e.patterns||[]):'';
+  document.getElementById('fPhrases').value=e?itemsToText(e.phrases||[]):'';
+  document.getElementById('pasteBox').value='';
+  document.getElementById('typeField').style.display='none';
+  document.getElementById('deleteBtn').style.display=e?'inline-block':'none';
+  updateTypeUI();
+  overlay.classList.add('show');
+  setTimeout(()=>document.getElementById('fDailyText').focus(),40);
+}
+let editType='card',editingDailyId=null;
+function updateTypeUI(){
+  const d=editType==='daily';
+  ['quickPaste','titleField','groupField','fullField'].forEach(id=>{document.getElementById(id).style.display=d?'none':'';});
+  ['dailyTextField','dailyZhField'].forEach(id=>{document.getElementById(id).style.display=d?'':'none';});
+  // 句型/短语 fields are shared: required workflow for cards, optional for daily entries
+  document.getElementById('typeCard').classList.toggle('on',!d);
+  document.getElementById('typePhr').classList.toggle('on',d);
+}
+document.getElementById('typeCard').onclick=()=>{editType='card';updateTypeUI();};
+document.getElementById('typePhr').onclick=()=>{editType='daily';updateTypeUI();};
 
 document.getElementById('saveBtn').onclick=()=>{
   const title=document.getElementById('fTitle').value.trim();
   const group=document.getElementById('fGroup').value.trim();
+  if(editingDailyId||(!editingId&&editType==='daily')){
+    const ftxt=document.getElementById('fDailyText').value.replace(/\r\n/g,'\n').trim();
+    const dzh=document.getElementById('fDailyZh').value.trim();
+    const dpat=textToItems(document.getElementById('fPatterns').value);
+    const dphr=textToItems(document.getElementById('fPhrases').value);
+    if(!ftxt){closeEditor();return;}
+    if(editingDailyId){
+      const e=state.daily.find(x=>x.id===editingDailyId);
+      if(e){e.fullText=ftxt;e.zh=dzh;e.patterns=dpat;e.phrases=dphr;}
+    }else{
+      state.daily.push({id:uid(),fullText:ftxt,zh:dzh,patterns:dpat,phrases:dphr,fav:false});
+      state.selectedId='__daily__';state.dailyOpen=null;
+    }
+    save();closeEditor();renderAll();
+    return;
+  }
   const patterns=textToItems(document.getElementById('fPatterns').value);
   const phrases=textToItems(document.getElementById('fPhrases').value);
   const fullText=document.getElementById('fFull').value.replace(/\r\n/g,'\n').trim();
@@ -1079,7 +1284,10 @@ document.getElementById('saveBtn').onclick=()=>{
   state.openGroup=group||UNGROUPED; // keep the saved card visible
   save();closeEditor();renderAll();
 };
-document.getElementById('deleteBtn').onclick=()=>{if(editingId){deleteAnswer(editingId,true);closeEditor();}};
+document.getElementById('deleteBtn').onclick=()=>{
+  if(editingDailyId){deleteDaily(editingDailyId,true);closeEditor();}
+  else if(editingId){deleteAnswer(editingId,true);closeEditor();}
+};
 document.getElementById('cancelBtn').onclick=closeEditor;
 document.getElementById('closeModal').onclick=closeEditor;
 // Only close when the press STARTED on the backdrop and ended there too.
@@ -1172,7 +1380,7 @@ document.getElementById('exportBtn').onclick=async()=>{
       if(vals[i]&&vals[i].size)audio.push({k:keys[i],d:await blobToB64(vals[i])});
     }
   }catch(e){}
-  const blob=new Blob([JSON.stringify({answers:state.answers,audio})],{type:'application/json'});
+  const blob=new Blob([JSON.stringify({answers:state.answers,daily:state.daily,audio})],{type:'application/json'});
   const url=URL.createObjectURL(blob);const a=document.createElement('a');
   const d=new Date();const stamp=d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0');
   a.href=url;a.download='面试练习备份-'+stamp+'.json';a.click();URL.revokeObjectURL(url);
@@ -1184,9 +1392,10 @@ document.getElementById('importFile').onchange=e=>{
   rd.onload=async()=>{
     try{
       const d=JSON.parse(rd.result);
-      const imported=(d.answers||d||[]).filter(x=>x&&x.fullText!==undefined);
+      const imported=(d.answers||d||[]).filter(x=>x&&(x.fullText!==undefined||Array.isArray(x.items)));
       if(!imported.length){alert('这个文件里没有找到可导入的回答。');return;}
-      if(confirm('导入 '+imported.length+' 条。选「确定」合并到现有内容（同名卡片会被导入的版本覆盖），选「取消」则替换全部。')){
+      const append=confirm('导入 '+imported.length+' 条。选「确定」合并到现有内容（同名内容会被导入的版本覆盖），选「取消」则替换全部。');
+      if(append){
         let added=0,updated=0;
         imported.forEach(x=>{
           const t=(x.title||'').trim();
@@ -1202,8 +1411,19 @@ document.getElementById('importFile').onchange=e=>{
         alert('导入完成：覆盖 '+updated+' 张同名卡片，新增 '+added+' 张。');
       }else{
         state.answers=imported.map(x=>({...x,id:uid()}));
+        state.daily=[];
       }
-      state.selectedId=state.answers[0].id;
+      if(Array.isArray(d.daily)&&d.daily.length){
+        d.daily.forEach(x=>{
+          if(!x||x.fullText===undefined)return;
+          const t=(x.fullText||'').trim();
+          const ex=t?state.daily.find(y=>(y.fullText||'').trim()===t):null;
+          if(ex){Object.keys(x).forEach(k=>{if(k!=='id')ex[k]=x[k];});}
+          else{x.id=uid();state.daily.push(x);}
+        });
+      }
+      migratePhrasebooks();
+      state.selectedId=state.answers[0]?state.answers[0].id:(state.daily.length?'__daily__':null);
       // restore bundled audio into the local cache
       if(Array.isArray(d.audio)&&d.audio.length){
         let n=0;
