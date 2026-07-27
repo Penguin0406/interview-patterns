@@ -1554,17 +1554,19 @@ $('pReplay').onclick=()=>{if(audio.src){audio.currentTime=0;audio.play().catch((
   $(id).addEventListener('click',function(){this.blur();});
 });
 document.addEventListener('keydown',e=>{
-  if(e.key!=='ArrowLeft'&&e.key!=='ArrowRight'&&e.key!=='Enter')return;
+  if(e.key!=='ArrowLeft'&&e.key!=='ArrowRight'&&e.key!=='Enter'&&e.key!==' ')return;
   if(e.defaultPrevented)return;                       // a focused card/group header already handled it
   if(document.querySelector('.overlay.show'))return;  // editor or settings modal open
   if($('player').hidden)return;
   const t=e.target,tag=t&&t.tagName;
   if(t&&(tag==='INPUT'||tag==='TEXTAREA'||tag==='SELECT'||t.isContentEditable))return; // keys belong to the field
-  if(e.key==='Enter'){
-    // Enter must still activate a focused button/link/card, not hijack it for replay
+  if(e.key==='Enter'||e.key===' '){
+    // Enter/Space must still activate a focused button/link/card, not hijack it
     if(t&&(tag==='BUTTON'||tag==='A'||(t.hasAttribute&&t.hasAttribute('tabindex'))))return;
-    e.preventDefault();
-    if(audio.src){audio.currentTime=0;audio.play().catch(()=>{});}
+    e.preventDefault();                               // Space would otherwise scroll the page
+    if(!audio.src)return;
+    if(e.key===' '){if(audio.paused)audio.play().catch(()=>{});else audio.pause();}
+    else{audio.currentTime=0;audio.play().catch(()=>{});}
     return;
   }
   e.preventDefault();
