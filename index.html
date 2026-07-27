@@ -770,7 +770,8 @@ function ttsSegments(text){
     const clauses=[];let last=0;
     for(const c of cuts){clauses.push([last,c]);last=c;}
     clauses.push([last,seg.length]);
-    const wc=(a,b)=>seg.slice(a,b).split(/\s+/).filter(w=>/[A-Za-z\u00C0-\u017F0-9]/.test(w)).length;
+    // elisions count as separate words: j'étais = je + étais = 2, d'une = 2
+    const wc=(a,b)=>seg.slice(a,b).split(/[\s'\u2018\u2019\u02BC]+/).filter(w=>/[A-Za-z\u00C0-\u017F0-9]/.test(w)).length;
     const merged=[];let bufStart=null;
     for(let i=0;i<clauses.length;i++){
       const [a,b]=clauses[i];
