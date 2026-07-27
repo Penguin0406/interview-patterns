@@ -532,7 +532,7 @@
       </div>
       <div class="field" id="dailyTextField" style="display:none">
         <label>内容</label>
-        <div class="desc">一句话或一段话都可以。</div>
+        <div class="desc">一句话或一段话都可以。想手动切分发音段，在切点处打一个前后带空格的 " / "（显示时自动隐藏）。</div>
         <textarea class="f" id="fDailyText" rows="4"></textarea>
       </div>
       <div class="field" id="dailyZhField" style="display:none">
@@ -551,6 +551,7 @@
       </div>
       <div class="field" id="fullField">
         <label>回答全文</label>
+        <div class="desc">段落之间空一行。想手动切分发音段，在切点处打一个前后带空格的 " / "（显示时自动隐藏，只影响朗读分段）。</div>
         <textarea class="f" id="fFull" rows="8" placeholder="粘贴完整回答。段落之间空一行即可。"></textarea>
       </div>
     </div>
@@ -713,8 +714,8 @@ function escHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(
 function escAttr(s){return escHtml(s).replace(/"/g,'&quot;');}
 function spacesToHtml(s){return escHtml(s).replace(/\n/g,'<br>');}
 
-function computeItems(answer,kind){
-  const text=answer.fullText||'';
+function computeItems(answer,kind,textOverride){
+  const text=textOverride!==undefined?textOverride:(answer.fullText||'');
   const src=kind==='pattern'?(answer.patterns||[]):(answer.phrases||[]);
   return src.map(it=>{
     const r=kind==='pattern'?matchPattern(text,it.en):{spans:findAll(text,it.en)};
@@ -722,8 +723,8 @@ function computeItems(answer,kind){
   });
 }
 
-function renderFull(text){
-  const segs=ttsSegments(text);
+function renderFull(text,cuts){
+  const segs=ttsSegments(text,cuts);
   const paras=[];{
     let re=/\n{2,}/g,last=0,m;
     while((m=re.exec(text))){paras.push([last,m.index]);last=m.index+m[0].length;}
@@ -747,6 +748,26 @@ function renderFull(text){
   return html;
 }
 
+function parseCuts(raw){
+  // " / " in the stored text is a manual cut marker: hidden from display,
+  // it forces a TTS segment boundary. A slash needs whitespace on at least
+  // one side to count, so 24/7, et/ou and URLs stay untouched.
+  const cuts=[];let out='';let i=0;
+  while(i<raw.length){
+    const ch=raw[i];
+    const prev=i>0?raw[i-1]:'';
+    const next=i+1<raw.length?raw[i+1]:'';
+    if(ch==='/'&&((/\s/.test(prev)||prev==='')||(/\s/.test(next)||next===''))){
+      while(out.length&&out[out.length-1]===' ')out=out.slice(0,-1);
+      let j=i+1;
+      while(j<raw.length&&(raw[j]==='/'||raw[j]===' '))j++;
+      if(out.length&&j<raw.length&&raw[j]!=='\n')out+=' ';
+      cuts.push(out.length);
+      i=j;
+    }else{out+=ch;i++;}
+  }
+  return {text:out,cuts:[...new Set(cuts)].filter(c=>c>0&&c<out.length)};
+}
 function sentenceSpans(text){
   // sentence ends at . ! ? (plus closing quotes/brackets) followed by whitespace or EOL;
   // decimals like 4.5 don't split because no whitespace follows the dot
@@ -757,39 +778,49 @@ function sentenceSpans(text){
   return spans;
 }
 
-function ttsSegments(text){
+function ttsSegments(text,cuts){
   // clause-level audio segments: cut at , ; : as well as sentence ends;
-  // a clause of <=5 words merges into the following clause, but once the
-  // merged run exceeds 6 words it closes as its own segment; a short final
-  // clause (<=5 words) merges back into the previous segment
+  // manual " / " cuts (passed in as offsets) are hard boundaries that the
+  // automatic rules never merge across. Within each block: a clause of <=5
+  // words merges into the following clause, but once the merged run exceeds
+  // 6 words it closes as its own segment; a short final clause (<=5 words)
+  // merges back into the previous segment of the same block.
+  cuts=cuts||[];
   const out=[];
   for(const sen of sentenceSpans(text)){
-    const seg=text.slice(sen.start,sen.end);
-    const cuts=[];const re=/[,;:]+(?=\s)/g;let m;
-    while((m=re.exec(seg))){cuts.push(m.index+m[0].length);}
-    const clauses=[];let last=0;
-    for(const c of cuts){clauses.push([last,c]);last=c;}
-    clauses.push([last,seg.length]);
-    // elisions count as separate words: j'étais = je + étais = 2, d'une = 2
-    const wc=(a,b)=>seg.slice(a,b).split(/[\s'\u2018\u2019\u02BC]+/).filter(w=>/[A-Za-z\u00C0-\u017F0-9]/.test(w)).length;
-    const merged=[];let bufStart=null;
-    for(let i=0;i<clauses.length;i++){
-      const [a,b]=clauses[i];
-      if(bufStart===null)bufStart=a;
-      const isLast=i===clauses.length-1;
-      const clauseW=wc(a,b), bufW=wc(bufStart,b);
-      if(clauseW>5||bufW>6||isLast){
-        if(isLast&&bufW<=5&&merged.length){merged[merged.length-1][1]=b;} // short tail joins previous
-        else merged.push([bufStart,b]);
-        bufStart=null;
-      }
-    }
-    for(const [a,b] of merged)out.push({start:sen.start+a,end:sen.start+b});
+    const inner=cuts.filter(c=>c>sen.start&&c<sen.end).sort((x,y)=>x-y);
+    const blocks=[];let bs=sen.start;
+    for(const c of inner){blocks.push([bs,c]);bs=c;}
+    blocks.push([bs,sen.end]);
+    for(const [BA,BB] of blocks)segmentAuto(text,BA,BB,out);
   }
   return out;
 }
+function segmentAuto(text,A,B,out){
+  const seg=text.slice(A,B);
+  const cutsC=[];const re=/[,;:]+(?=\s)/g;let m;
+  while((m=re.exec(seg))){cutsC.push(m.index+m[0].length);}
+  const clauses=[];let last=0;
+  for(const c of cutsC){clauses.push([last,c]);last=c;}
+  clauses.push([last,seg.length]);
+  // elisions count as separate words: j'étais = je + étais = 2, d'une = 2
+  const wc=(a,b)=>seg.slice(a,b).split(/[\s'\u2018\u2019\u02BC]+/).filter(w=>/[A-Za-z\u00C0-\u017F0-9]/.test(w)).length;
+  const merged=[];let bufStart=null;
+  for(let i=0;i<clauses.length;i++){
+    const [a,b]=clauses[i];
+    if(bufStart===null)bufStart=a;
+    const isLast=i===clauses.length-1;
+    const clauseW=wc(a,b), bufW=wc(bufStart,b);
+    if(clauseW>5||bufW>6||isLast){
+      if(isLast&&bufW<=5&&merged.length){merged[merged.length-1][1]=b;} // short tail joins previous
+      else merged.push([bufStart,b]);
+      bufStart=null;
+    }
+  }
+  for(const [a,b] of merged)out.push({start:A+a,end:A+b});
+}
 
-function renderMasked(text,items){
+function renderMasked(text,items,cuts){
   // owner map: first-wins
   const owner=new Int16Array(text.length).fill(-1);
   items.forEach((it,idx)=>it.spans.forEach(sp=>{
@@ -835,7 +866,7 @@ function renderMasked(text,items){
   for(const [ps,pe] of paras){
     if(pe<=ps){continue;}
     let seg='';
-    const allSegs=ttsSegments(text);
+    const allSegs=ttsSegments(text,cuts);
     for(let s=0;s<sents.length;s++){
       const ss=Math.max(sents[s].start,ps), se=Math.min(sents[s].end,pe);
       if(se<=ss)continue;
@@ -1021,7 +1052,7 @@ function renderSidebar(){
 
 
 function dailyTitle(e){
-  const t=(e.fullText||'').replace(/\s+/g,' ').trim();
+  const t=parseCuts(e.fullText||'').text.replace(/\s+/g,' ').trim();
   return t.length>46?t.slice(0,46).replace(/\s+\S*$/,'')+' …':t;
 }
 function deleteDaily(id,skip){
@@ -1037,7 +1068,7 @@ function renderDailyBoard(){
   for(const e of shown){
     const hasCloze=(e.patterns&&e.patterns.length)||(e.phrases&&e.phrases.length);
     rows+='<div class="pb-row" data-id="'+e.id+'">'
-      +'<button class="abtn" data-t="'+escAttr(e.fullText||'')+'" title="朗读" aria-label="朗读"></button>'
+      +'<button class="abtn" data-t="'+escAttr(parseCuts(e.fullText||'').text)+'" title="朗读" aria-label="朗读"></button>'
       +'<button class="pstar'+(e.fav?' on':'')+'" aria-label="收藏这条"></button>'
       +'<div class="pb-main"><div class="pb-en">'+escHtml(dailyTitle(e))+'</div>'
       +(e.zh?'<div class="pb-zh"'+(state.pbShowZh?'':' hidden')+'>'+escHtml(e.zh)+'</div>':'')
@@ -1112,14 +1143,15 @@ function renderMain(){
 }
 function renderCardView(a,isDaily){
   const mode=state.mode;
+  const parsed=parseCuts(a.fullText||''); // markers hidden from display and matching
   let bodyHtml,footHtml='';
   if(mode==='full'){
-    bodyHtml=renderFull(a.fullText||'');
+    bodyHtml=renderFull(parsed.text,parsed.cuts);
   }else{
     const kind=mode==='pattern'?'pattern':'phrase';
-    const items=computeItems(a,kind);
+    const items=computeItems(a,kind,parsed.text);
     let n=0; items.forEach(it=>{ if(it.spans.length) it.num=++n; });
-    bodyHtml=renderMasked(a.fullText||'',items);
+    bodyHtml=renderMasked(parsed.text,items,parsed.cuts);
     const unmatched=items.filter(it=>it.spans.length===0);
     if(unmatched.length){
       footHtml='<div class="footnote">这些'+(mode==='pattern'?'句型':'短语')+'没在全文里找到，练习时已跳过（可能是措辞不同或写错）：<br>'+
