@@ -759,8 +759,9 @@ function sentenceSpans(text){
 
 function ttsSegments(text){
   // clause-level audio segments: cut at , ; : as well as sentence ends;
-  // a clause of <=6 words merges into the following clause; a short final
-  // clause merges back into the previous segment
+  // a clause of <=5 words merges into the following clause, but once the
+  // merged run exceeds 6 words it closes as its own segment; a short final
+  // clause (<=5 words) merges back into the previous segment
   const out=[];
   for(const sen of sentenceSpans(text)){
     const seg=text.slice(sen.start,sen.end);
@@ -775,8 +776,9 @@ function ttsSegments(text){
       const [a,b]=clauses[i];
       if(bufStart===null)bufStart=a;
       const isLast=i===clauses.length-1;
-      if(wc(a,b)>6||isLast){
-        if(isLast&&wc(bufStart,b)<=6&&merged.length){merged[merged.length-1][1]=b;}
+      const clauseW=wc(a,b), bufW=wc(bufStart,b);
+      if(clauseW>5||bufW>6||isLast){
+        if(isLast&&bufW<=5&&merged.length){merged[merged.length-1][1]=b;} // short tail joins previous
         else merged.push([bufStart,b]);
         bufStart=null;
       }
