@@ -217,6 +217,8 @@
   .sbtn.on{color:var(--phr-ink);}
   @media (forced-colors:active){
     .blank{border-bottom-width:2px;}
+    /* high-contrast mode strips custom slider styling: fall back to the native control */
+    #pSeek{-webkit-appearance:auto;appearance:auto;height:auto;background:none;border:none;}
   }
 
   /* footnote for unmatched items */
@@ -258,8 +260,8 @@
          white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px;}
   .ptime{font-family:var(--mono);font-size:11px;color:var(--muted);flex:0 0 auto;}
   .pregen{padding:5px 9px;font-size:13px;flex:0 0 auto;}
-  #pSeek{width:100%;-webkit-appearance:none;appearance:none;height:4px;border-radius:3px;
-         background:var(--well);outline:none;cursor:pointer;}
+  #pSeek{width:100%;-webkit-appearance:none;appearance:none;height:7px;border-radius:4px;
+         background:var(--well);border:1px solid var(--faint);outline:none;cursor:pointer;}
   #pSeek::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:13px;height:13px;
          border-radius:50%;background:var(--ink);cursor:pointer;border:none;}
   #pSeek::-moz-range-thumb{width:13px;height:13px;border-radius:50%;background:var(--ink);
@@ -1545,6 +1547,18 @@ function stepAudio(dir){
 $('pPrev').onclick=()=>stepAudio(-1);
 $('pNext').onclick=()=>stepAudio(1);
 $('pReplay').onclick=()=>{if(audio.src){audio.currentTime=0;audio.play().catch(()=>{});}};
+// keyboard transport: ← prev, → next, Enter replay — main window only
+document.addEventListener('keydown',e=>{
+  if(e.key!=='ArrowLeft'&&e.key!=='ArrowRight'&&e.key!=='Enter')return;
+  if(e.defaultPrevented)return;                       // a focused card/group header already handled it
+  if(document.querySelector('.overlay.show'))return;  // editor or settings modal open
+  const t=e.target;
+  if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.tagName==='SELECT'||t.tagName==='BUTTON'||t.tagName==='A'||t.isContentEditable))return;
+  if($('player').hidden)return;
+  if(e.key==='ArrowLeft'){e.preventDefault();stepAudio(-1);}
+  else if(e.key==='ArrowRight'){e.preventDefault();stepAudio(1);}
+  else{e.preventDefault();if(audio.src){audio.currentTime=0;audio.play().catch(()=>{});}}
+});
 
 function loadBlob(blob,label){
   if(curUrl)URL.revokeObjectURL(curUrl);
