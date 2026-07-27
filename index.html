@@ -480,6 +480,11 @@
         <input class="f" id="tSpeed" type="number" min="0.25" max="4" step="0.05" value="1">
       </div>
       <div class="field">
+        <label>拖动后循环次数</label>
+        <div class="desc">播放结束后拖动进度条，会从该位置直接播放并循环这么多遍。</div>
+        <input class="f" id="tLoops" type="number" min="1" max="20" step="1" value="3">
+      </div>
+      <div class="field">
         <label>本地缓存</label>
         <div class="desc" id="cacheInfo">统计中…</div>
         <button class="btn ghost" id="clearCache" style="margin-top:8px;">清空全部已生成的发音</button>
@@ -1449,7 +1454,7 @@ const CFG_KEY='en_tts_cfg', KEY_KEY='en_tts_key';
 const VOICES=['alloy','ash','ballad','cedar','coral','echo','fable','marin','nova','onyx','sage','shimmer','verse'];
 // these voices are not accepted by the tts-1 family (only by gpt-4o-mini-tts)
 const NEW_ONLY=['ballad','verse','marin','cedar'];
-const DEF_CFG={base:'https://aihubmix.com/v1',model:'gpt-4o-mini-tts',voice:'marin',
+const DEF_CFG={base:'https://aihubmix.com/v1',model:'gpt-4o-mini-tts',voice:'marin',loops:3,
                instructions:'Speak clear, natural English at a measured pace.',speed:1};
 function getCfg(){
   let c={...DEF_CFG};
@@ -1511,7 +1516,7 @@ async function fetchTTS(text,cfg){
 
 /* ---- player ---- */
 const audio=new Audio();
-let curUrl=null,curKey=null,curBtn=null,seeking=false,lastText=null;
+let curUrl=null,curKey=null,curBtn=null,seeking=false,lastText=null,loopStart=0,loopLeft=0;
 const $=id=>document.getElementById(id);
 function fmt(t){if(!isFinite(t))return '0:00';const m=Math.floor(t/60),s=Math.floor(t%60);return m+':'+String(s).padStart(2,'0');}
 function updTime(){
@@ -1522,11 +1527,28 @@ audio.addEventListener('timeupdate',updTime);
 audio.addEventListener('loadedmetadata',updTime);
 audio.addEventListener('play',()=>{$('pPlay').classList.add('on');if(curBtn)curBtn.classList.add('playing');});
 audio.addEventListener('pause',()=>{$('pPlay').classList.remove('on');if(curBtn)curBtn.classList.remove('playing');});
-audio.addEventListener('ended',()=>{$('pPlay').classList.remove('on');if(curBtn)curBtn.classList.remove('playing');});
+audio.addEventListener('ended',()=>{
+  if(loopLeft>0){loopLeft--;audio.currentTime=loopStart;audio.play().catch(()=>{});return;}
+  loopStart=0;
+  $('pPlay').classList.remove('on');if(curBtn)curBtn.classList.remove('playing');
+});
 $('pPlay').onclick=()=>{if(audio.paused)audio.play().catch(()=>{});else audio.pause();};
 $('pSeek').addEventListener('input',()=>{seeking=true;if(audio.duration)$('pTime').textContent=fmt($('pSeek').value/1000*audio.duration)+' / '+fmt(audio.duration);});
-$('pSeek').addEventListener('change',()=>{if(audio.duration)audio.currentTime=$('pSeek').value/1000*audio.duration;seeking=false;});
-$('pClose').onclick=()=>{audio.pause();$('player').hidden=true;document.body.classList.remove('player-on');if(curBtn)curBtn.classList.remove('playing');};
+$('pSeek').addEventListener('change',()=>{
+  if(audio.duration){
+    const pos=$('pSeek').value/1000*audio.duration;
+    const wasEnded=audio.ended;               // must read before seeking clears it
+    audio.currentTime=pos;
+    if(loopLeft>0)loopStart=pos;              // re-anchor an active loop to the new position
+    if(wasEnded){
+      loopStart=pos;
+      loopLeft=Math.max(0,(parseInt(getCfg().loops,10)||3)-1);
+      audio.play().catch(()=>{});
+    }
+  }
+  seeking=false;
+});
+$('pClose').onclick=()=>{loopStart=0;loopLeft=0;audio.pause();$('player').hidden=true;document.body.classList.remove('player-on');if(curBtn)curBtn.classList.remove('playing');};
 $('pRegen').onclick=()=>{const b=currentAudioBtn();if(b)playSentence(b,true);};
 // prev / next walk the audio segments in reading order; missing clips are generated on the fly
 function allAudioBtns(){return [...mainInner.querySelectorAll('.abtn')];}
@@ -1546,7 +1568,7 @@ function stepAudio(dir){
 }
 $('pPrev').onclick=()=>stepAudio(-1);
 $('pNext').onclick=()=>stepAudio(1);
-$('pReplay').onclick=()=>{if(audio.src){audio.currentTime=0;audio.play().catch(()=>{});}};
+$('pReplay').onclick=()=>{if(audio.src){loopStart=0;loopLeft=0;audio.currentTime=0;audio.play().catch(()=>{});}};
 // keyboard transport: ← prev, → next, Enter replay — main window only
 // clicking a button leaves it focused, so transport buttons release focus after use;
 // arrows stay active even when a button is focused (buttons don't use arrow keys)
@@ -1566,7 +1588,7 @@ document.addEventListener('keydown',e=>{
     e.preventDefault();                               // Space would otherwise scroll the page
     if(!audio.src)return;
     if(e.key===' '){if(audio.paused)audio.play().catch(()=>{});else audio.pause();}
-    else{audio.currentTime=0;audio.play().catch(()=>{});}
+    else{loopStart=0;loopLeft=0;audio.currentTime=0;audio.play().catch(()=>{});}
     return;
   }
   e.preventDefault();
@@ -1574,6 +1596,7 @@ document.addEventListener('keydown',e=>{
 });
 
 function loadBlob(blob,label){
+  loopStart=0;loopLeft=0;                     // a new clip clears any pending loop
   if(curUrl)URL.revokeObjectURL(curUrl);
   curUrl=URL.createObjectURL(blob);
   audio.src=curUrl;
@@ -1642,6 +1665,7 @@ $('ttsBtn').onclick=()=>{
   fillVoices();
   $('tInstr').value=c.instructions||'';
   $('tSpeed').value=c.speed||1;
+  $('tLoops').value=c.loops||3;
   showCacheInfo();
   $('ttsOverlay').classList.add('show');
 };
@@ -1651,7 +1675,8 @@ $('ttsClose').onclick=closeTts;
 $('ttsSave').onclick=()=>{
   setKey($('tKey').value.trim());
   setCfg({base:$('tBase').value.trim()||DEF_CFG.base,model:$('tModel').value,voice:$('tVoice').value,
-          instructions:$('tInstr').value.trim(),speed:parseFloat($('tSpeed').value)||1});
+          instructions:$('tInstr').value.trim(),speed:parseFloat($('tSpeed').value)||1,
+          loops:Math.min(20,Math.max(1,parseInt($('tLoops').value,10)||3))});
   closeTts();markCached();
 };
 $('clearCache').onclick=async()=>{
