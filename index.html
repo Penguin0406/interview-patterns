@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>面试回答挖空练习</title>
+<title>流畅表达任何事</title>
 <script>(function(){try{var t=localStorage.getItem("ip_theme");if(!t&&window.matchMedia&&matchMedia("(prefers-color-scheme: dark)").matches)t="dark";if(t==="dark")document.documentElement.setAttribute("data-theme","dark");}catch(e){}})();</script>
 <meta name="color-scheme" content="light dark">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%23f4f1ea'/%3E%3Ctext x='50' y='50' text-anchor='middle' dominant-baseline='central' font-size='62'%3E%F0%9F%8E%A4%3C/text%3E%3C/svg%3E">
@@ -85,7 +85,8 @@
   #listToggle{display:none;white-space:nowrap;}
   #listToggle .lt-chev{display:inline-block;transition:transform .15s;}
   .side.open #listToggle .lt-chev{transform:rotate(180deg);}
-  .brand{font-family:var(--serif);font-weight:600;font-size:19px;letter-spacing:.2px;}
+  .brand{font-family:var(--serif);font-weight:600;font-size:19px;letter-spacing:.2px;cursor:pointer;border-radius:6px;}
+  .brand:hover{color:var(--muted);}
   .brand-sub{font-family:var(--mono);font-size:10.5px;color:var(--muted);margin-top:4px;letter-spacing:.4px;text-transform:uppercase;}
   .side-tools{display:flex;gap:8px;padding:12px 16px;border-bottom:1px solid var(--line);}
   .side-tools .btn{flex:1;}
@@ -401,7 +402,7 @@
   <aside class="side">
     <div class="side-head">
       <div>
-        <div class="brand">面试回答挖空练习</div>
+        <div class="brand" id="brandTitle" title="点击修改标题">流畅表达任何事</div>
         <div class="brand-sub">full · pattern · phrase</div>
       </div>
       <div style="display:flex;gap:8px;align-items:center;">
@@ -625,7 +626,8 @@ function matchPattern(text,pat){
    State + storage
    ============================================================ */
 const LS_KEY='interview_practice_v1';
-let state={answers:[],selectedId:null,mode:'full',showZh:false,revealAll:false,openGroup:null,pbShowZh:false,pbFavOnly:false,daily:[],dailyOpen:null};
+const DEF_TITLE='流畅表达任何事';
+let state={answers:[],selectedId:null,mode:'full',showZh:false,revealAll:false,openGroup:null,pbShowZh:false,pbFavOnly:false,daily:[],dailyOpen:null,appTitle:DEF_TITLE};
 
 function uid(){return 'a'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
 
@@ -692,7 +694,8 @@ function load(){
       if('pbShowZh'in d)state.pbShowZh=d.pbShowZh;
       if('pbFavOnly'in d)state.pbFavOnly=d.pbFavOnly;
       if(Array.isArray(d.daily))state.daily=d.daily;
-      if('dailyOpen'in d)state.dailyOpen=d.dailyOpen;}
+      if('dailyOpen'in d)state.dailyOpen=d.dailyOpen;
+      if(typeof d.appTitle==='string'&&d.appTitle.trim())state.appTitle=d.appTitle.trim();}
   }catch(e){}
   if(!state.answers.length&&!state.daily.length)state.answers=seedData();
   migratePhrasebooks();
@@ -704,7 +707,7 @@ function load(){
   }
 }
 function save(){
-  try{localStorage.setItem(LS_KEY,JSON.stringify({answers:state.answers,selectedId:state.selectedId,showZh:state.showZh,openGroup:state.openGroup,pbShowZh:state.pbShowZh,pbFavOnly:state.pbFavOnly,daily:state.daily,dailyOpen:state.dailyOpen}));}catch(e){}
+  try{localStorage.setItem(LS_KEY,JSON.stringify({answers:state.answers,selectedId:state.selectedId,showZh:state.showZh,openGroup:state.openGroup,pbShowZh:state.pbShowZh,pbFavOnly:state.pbFavOnly,daily:state.daily,dailyOpen:state.dailyOpen,appTitle:state.appTitle}));}catch(e){}
 }
 
 /* ============================================================
@@ -1425,7 +1428,7 @@ document.getElementById('exportBtn').onclick=async()=>{
   const blob=new Blob([JSON.stringify({answers:state.answers,daily:state.daily,audio})],{type:'application/json'});
   const url=URL.createObjectURL(blob);const a=document.createElement('a');
   const d=new Date();const stamp=d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0');
-  a.href=url;a.download='面试练习备份-'+stamp+'.json';a.click();URL.revokeObjectURL(url);
+  a.href=url;a.download=(state.appTitle||DEF_TITLE)+'-备份-'+stamp+'.json';a.click();URL.revokeObjectURL(url);
 };
 document.getElementById('importBtn').onclick=()=>document.getElementById('importFile').click();
 document.getElementById('importFile').onchange=e=>{
@@ -1727,6 +1730,17 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape'&&$('ttsOverlay').cla
 /* ============================================================
    Boot
    ============================================================ */
+function applyTitle(){
+  document.title=state.appTitle||DEF_TITLE;
+  const b=document.getElementById('brandTitle');
+  if(b)b.textContent=state.appTitle||DEF_TITLE;
+}
+document.getElementById('brandTitle').onclick=()=>{
+  const nn=prompt('修改标题（清空后确定 = 恢复默认「'+DEF_TITLE+'」）',state.appTitle||DEF_TITLE);
+  if(nn===null)return;
+  state.appTitle=nn.trim()||DEF_TITLE;
+  save();applyTitle();
+};
 document.getElementById('themeToggle').onclick=function(){
   const root=document.documentElement;
   const dark=root.getAttribute('data-theme')==='dark';
@@ -1738,7 +1752,7 @@ document.getElementById('listToggle').onclick=function(){
   const open=side.classList.toggle('open');
   this.setAttribute('aria-expanded',open?'true':'false');
 };
-load();renderAll();
+load();applyTitle();renderAll();
 </script>
 </body>
 </html>
