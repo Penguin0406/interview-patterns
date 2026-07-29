@@ -283,7 +283,9 @@
   .pstar:hover{color:var(--ink);}
   .pstar.on{color:var(--pat-ink);}
   .pb-main{flex:1;min-width:0;}
-  .pb-en{font-family:var(--serif);font-size:17.5px;line-height:1.65;cursor:pointer;}
+  .pb-en{font-family:var(--serif);font-size:17.5px;line-height:1.9;cursor:pointer;overflow-wrap:break-word;}
+  .pb-en .hl.phw{text-decoration:none;}
+  .pb-add textarea{flex:1.2;min-width:170px;resize:vertical;font-size:13px;line-height:1.4;}
   .pb-zh{font-family:var(--sans);font-size:13px;color:var(--muted);margin-top:4px;line-height:1.55;}
   .pb-act{border:none;background:none;color:var(--faint);cursor:pointer;font-size:13px;
           padding:3px 6px;border-radius:6px;margin-top:3px;flex:0 0 auto;}
@@ -1065,6 +1067,33 @@ function deleteDaily(id,skip){
   if(state.dailyOpen===id)state.dailyOpen=null;
   save();renderAll();
 }
+function renderDailyRowHtml(e){
+  // full text, wrapped; phrases blanked out (click to reveal), patterns and
+  // plain text visible; both patterns and revealed phrases carry zh tooltips
+  const text=parseCuts(e.fullText||'').text;
+  const pats=(e.patterns||[]).map(it=>({zh:it.zh||'',spans:matchPattern(text,it.en).spans}));
+  const phrs=(e.phrases||[]).map(it=>({zh:it.zh||'',spans:findAll(text,it.en)}));
+  const items=pats.concat(phrs);
+  const owner=new Int16Array(text.length).fill(-1);
+  items.forEach((it,idx)=>it.spans.forEach(sp=>{
+    for(let i=sp.start;i<sp.end&&i<text.length;i++)if(owner[i]===-1)owner[i]=idx;
+  }));
+  let html='',i=0;
+  while(i<text.length){
+    const o=owner[i];let j=i+1;while(j<text.length&&owner[j]===o)j++;
+    const chunk=text.slice(i,j);
+    if(o>=0&&o<pats.length){
+      html+='<span class="hl" data-zh="'+escAttr(items[o].zh)+'">'+escHtml(chunk)+'</span>';
+    }else if(o>=0){
+      const w=Math.min(Math.max(chunk.replace(/\s+/g,' ').length,2),8);
+      html+='<span class="hl phw" data-zh="'+escAttr(items[o].zh)+'"><span class="blank" style="--w:'+w+'ch"><span class="bt">'+escHtml(chunk)+'</span></span></span>';
+    }else{
+      html+=spacesToHtml(chunk);
+    }
+    i=j;
+  }
+  return html;
+}
 function renderDailyBoard(){
   const shown=state.daily.filter(e=>!state.pbFavOnly||e.fav);
   let rows='';
@@ -1073,7 +1102,7 @@ function renderDailyBoard(){
     rows+='<div class="pb-row" data-id="'+e.id+'">'
       +'<button class="abtn" data-t="'+escAttr(parseCuts(e.fullText||'').text)+'" title="朗读" aria-label="朗读"></button>'
       +'<button class="pstar'+(e.fav?' on':'')+'" aria-label="收藏这条"></button>'
-      +'<div class="pb-main"><div class="pb-en">'+escHtml(dailyTitle(e))+'</div>'
+      +'<div class="pb-main"><div class="pb-en">'+renderDailyRowHtml(e)+'</div>'
       +(e.zh?'<div class="pb-zh"'+(state.pbShowZh?'':' hidden')+'>'+escHtml(e.zh)+'</div>':'')
       +'</div>'
       +'<button class="pb-act pb-open" title="'+(hasCloze?'打开练习（含句型/短语挖空）':'打开练习')+'">›</button>'
@@ -1089,24 +1118,31 @@ function renderDailyBoard(){
     +'</div></div>'
     +'<div class="card pb-card">'+rows
     +'<div class="pb-add">'
-    +'<input class="f" id="pbEn" placeholder="外语句子或一段话">'
-    +'<input class="f" id="pbZh" placeholder="中文（可留空）">'
+    +'<input class="f" id="pbEn" placeholder="英语内容">'
+    +'<textarea class="f" id="pbPP" rows="2" placeholder="粘贴 句型 / 短语 列表（可留空，自动识别）"></textarea>'
     +'<button class="btn primary" id="pbAdd">添加</button>'
     +'</div></div>'
-    +'<p class="pb-hint">点句子看中文，› 打开完整练习页；长内容的句型和短语在 ✎ 里选填。</p>';
+    +'<p class="pb-hint">短语默认挖空，点空白显示；悬停句型和短语看中文；› 打开完整练习页。右侧粘贴框支持整段「句型/短语」自动识别，Ctrl+回车添加。</p>';
   document.getElementById('pbFav').onclick=()=>{state.pbFavOnly=!state.pbFavOnly;save();renderMain();};
   document.getElementById('pbZh').onclick=()=>{state.pbShowZh=!state.pbShowZh;save();renderMain();};
   const addRow=()=>{
     const en=document.getElementById('pbEn').value.trim();
-    const zh=document.getElementById('pbZh').value.trim();
+    const raw=document.getElementById('pbPP').value;
     if(!en)return;
-    state.daily.push({id:uid(),fullText:en,zh,patterns:[],phrases:[],fav:false});
+    let patterns=[],phrases=[];
+    if(raw.trim()){
+      const r=parsePasted(raw);                       // recognises 句型/短语 section headers
+      patterns=textToItems(r.patterns.join('\n'));
+      phrases=textToItems(r.phrases.join('\n'));
+      if(!patterns.length&&!phrases.length)phrases=textToItems(raw); // headerless lines default to phrases
+    }
+    state.daily.push({id:uid(),fullText:en,zh:'',patterns,phrases,fav:false});
     save();renderAll();
     setTimeout(()=>{const el=document.getElementById('pbEn');if(el)el.focus();},30);
   };
   document.getElementById('pbAdd').onclick=addRow;
-  document.getElementById('pbEn').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();document.getElementById('pbZh').focus();}});
-  document.getElementById('pbZh').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();addRow();}});
+  document.getElementById('pbEn').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();document.getElementById('pbPP').focus();}});
+  document.getElementById('pbPP').addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();addRow();}});
   const cardEl=mainInner.querySelector('.pb-card');
   cardEl.addEventListener('click',e=>{
     if(e.target.closest('.abtn'))return;   // shared audio listener handles playback
@@ -1118,6 +1154,10 @@ function renderDailyBoard(){
     if(e.target.closest('.pb-open')){state.dailyOpen=id;save();renderMain();return;}
     if(e.target.closest('.pb-edit')){openDailyEditor(id);return;}
     if(e.target.closest('.pb-del')){deleteDaily(id);return;}
+    const bl=e.target.closest('.blank');
+    if(bl){bl.classList.toggle('revealed');return;}
+    const hl=e.target.closest('.hl');
+    if(hl){if(!hl.classList.contains('phw'))hl.classList.toggle('pinned');return;}
     if(e.target.closest('.pb-en')&&!state.pbShowZh){
       const zhEl=row.querySelector('.pb-zh');
       if(zhEl)zhEl.hidden=!zhEl.hidden;
