@@ -702,7 +702,7 @@ function load(){
       if('openGroup'in d)state.openGroup=d.openGroup;
       if('pbShowZh'in d)state.pbShowZh=d.pbShowZh;
       if('pbFavOnly'in d)state.pbFavOnly=d.pbFavOnly;
-      if(d.pbMode==='phrase'||d.pbMode==='pattern')state.pbMode=d.pbMode;
+      if(d.pbMode==='phrase'||d.pbMode==='pattern'||d.pbMode==='full')state.pbMode=d.pbMode;
       if(Array.isArray(d.daily))state.daily=d.daily;
       if('dailyOpen'in d)state.dailyOpen=d.dailyOpen;
       if(typeof d.appTitle==='string'&&d.appTitle.trim())state.appTitle=d.appTitle.trim();}
@@ -1079,7 +1079,7 @@ function renderDailyRowHtml(e){
   // full text, wrapped; board-wide mode decides which side is blanked:
   // pattern mode blanks the phrases, phrase mode blanks the patterns;
   // one ♪ per TTS segment, same segmentation rules as cards (incl. " / ")
-  const phraseMode=state.pbMode==='phrase';
+  const mode=state.pbMode==='phrase'?'phrase':(state.pbMode==='full'?'full':'pattern');
   const parsed=parseCuts(e.fullText||'');
   const text=parsed.text;
   const pats=(e.patterns||[]).map(it=>({zh:it.zh||'',spans:matchPattern(text,it.en).spans}));
@@ -1096,7 +1096,7 @@ function renderDailyRowHtml(e){
       const chunk=text.slice(i,j);
       if(o>=0){
         const isPat=o<pats.length;
-        const visible=phraseMode?!isPat:isPat;
+        const visible=mode==='full'?true:(mode==='phrase'?!isPat:isPat);
         if(visible){
           out+='<span class="hl" data-zh="'+escAttr(items[o].zh)+'">'+escHtml(chunk)+'</span>';
         }else{
@@ -1152,7 +1152,8 @@ function renderDailyBoard(){
   mainInner.innerHTML='<h1 class="ans-title">日常用语</h1>'
     +'<div class="controls">'
     +'<div class="seg">'
-    +'<button data-m="pattern" class="'+(state.pbMode!=='phrase'?'on':'')+'">句型</button>'
+    +'<button data-m="full" class="'+(state.pbMode==='full'?'on':'')+'">全文</button>'
+    +'<button data-m="pattern" class="'+(state.pbMode!=='phrase'&&state.pbMode!=='full'?'on':'')+'">句型</button>'
     +'<button data-m="phrase" class="'+(state.pbMode==='phrase'?'on':'')+'">短语</button>'
     +'</div>'
     +'<div class="aux">'
@@ -1165,7 +1166,7 @@ function renderDailyBoard(){
     +'<textarea class="f" id="pbPP" rows="2" placeholder="粘贴 句型 / 短语 列表（可留空，自动识别）"></textarea>'
     +'<button class="btn primary" id="pbAdd">添加</button>'
     +'</div></div>'
-    +'<p class="pb-hint">句型模式挖短语，短语模式挖句型；点空白显示，悬停看中文；每个 ♪ 朗读一段（分段规则与卡片一致，含 " / " 手动切分）；拖 ⠿ 排序，› 打开完整练习页。粘贴框支持「句型/短语」自动识别，Ctrl+回车添加。</p>';
+    +'<p class="pb-hint">全文不挖空，句型模式挖短语，短语模式挖句型；点空白显示，悬停看中文；每个 ♪ 朗读一段（分段规则与卡片一致，含 " / " 手动切分）；拖 ⠿ 排序，› 打开完整练习页。粘贴框支持「句型/短语」自动识别，Ctrl+回车添加。</p>';
   mainInner.querySelectorAll('.controls .seg button').forEach(b=>{
     b.onclick=()=>{state.pbMode=b.dataset.m;save();renderMain();};
   });
