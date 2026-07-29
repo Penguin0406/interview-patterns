@@ -273,8 +273,15 @@
            background-size:5px 5px,5px 5px;background-repeat:no-repeat;}
 
   /* ---------- phrasebook ---------- */
-  .pb-card{padding:6px 24px 18px;font-family:var(--sans);font-size:15px;line-height:1.5;}
-  .pb-row{display:flex;align-items:flex-start;gap:9px;padding:13px 0;border-bottom:1px solid var(--line);}
+  .pb-item{display:flex;align-items:flex-start;gap:9px;padding:15px 17px;margin-bottom:10px;}
+  .pb-drag{border:none;background:none;color:var(--faint);cursor:grab;font-size:14px;
+           padding:2px 3px;margin-top:4px;flex:0 0 auto;border-radius:5px;line-height:1;}
+  .pb-drag:hover{color:var(--ink);}
+  .pb-drag:active{cursor:grabbing;}
+  .pb-item.dragging{opacity:.45;}
+  .pb-item.drop-above{box-shadow:0 -2.5px 0 0 var(--phr-ink);}
+  .pb-item.drop-below{box-shadow:0 2.5px 0 0 var(--phr-ink);}
+  .pb-add-card{padding:14px 16px;}
   .pb-en .abtn{font-size:.72em;}
   .pstar{border:none;background:none;cursor:pointer;padding:2px;line-height:1;
          font-size:15px;color:var(--faint);margin-top:3px;border-radius:5px;flex:0 0 auto;}
@@ -373,7 +380,7 @@
     .ptime{display:none;}
     .pnav{width:26px;height:26px;font-size:13px;}
     .pregen{padding:4px 7px;}
-    .pb-card{padding:4px 15px 14px;}
+    .pb-item{padding:12px 12px;}
     .pb-en{font-size:16px;}
     .pb-add input{min-width:120px;}
     .player{gap:6px;}
@@ -629,7 +636,7 @@ function matchPattern(text,pat){
    ============================================================ */
 const LS_KEY='interview_practice_v1';
 const DEF_TITLE='流畅表达任何事';
-let state={answers:[],selectedId:null,mode:'full',showZh:false,revealAll:false,openGroup:null,pbShowZh:false,pbFavOnly:false,daily:[],dailyOpen:null,appTitle:DEF_TITLE};
+let state={answers:[],selectedId:null,mode:'full',showZh:false,revealAll:false,openGroup:null,pbShowZh:false,pbFavOnly:false,pbMode:'pattern',daily:[],dailyOpen:null,appTitle:DEF_TITLE};
 
 function uid(){return 'a'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
 
@@ -695,6 +702,7 @@ function load(){
       if('openGroup'in d)state.openGroup=d.openGroup;
       if('pbShowZh'in d)state.pbShowZh=d.pbShowZh;
       if('pbFavOnly'in d)state.pbFavOnly=d.pbFavOnly;
+      if(d.pbMode==='phrase'||d.pbMode==='pattern')state.pbMode=d.pbMode;
       if(Array.isArray(d.daily))state.daily=d.daily;
       if('dailyOpen'in d)state.dailyOpen=d.dailyOpen;
       if(typeof d.appTitle==='string'&&d.appTitle.trim())state.appTitle=d.appTitle.trim();}
@@ -709,7 +717,7 @@ function load(){
   }
 }
 function save(){
-  try{localStorage.setItem(LS_KEY,JSON.stringify({answers:state.answers,selectedId:state.selectedId,showZh:state.showZh,openGroup:state.openGroup,pbShowZh:state.pbShowZh,pbFavOnly:state.pbFavOnly,daily:state.daily,dailyOpen:state.dailyOpen,appTitle:state.appTitle}));}catch(e){}
+  try{localStorage.setItem(LS_KEY,JSON.stringify({answers:state.answers,selectedId:state.selectedId,showZh:state.showZh,openGroup:state.openGroup,pbShowZh:state.pbShowZh,pbFavOnly:state.pbFavOnly,pbMode:state.pbMode,daily:state.daily,dailyOpen:state.dailyOpen,appTitle:state.appTitle}));}catch(e){}
 }
 
 /* ============================================================
@@ -1068,9 +1076,10 @@ function deleteDaily(id,skip){
   save();renderAll();
 }
 function renderDailyRowHtml(e){
-  // full text, wrapped; phrases blanked out (click to reveal), patterns and
-  // plain text visible, zh tooltips on both; one ♪ per TTS segment, using the
-  // exact same segmentation rules as cards (auto rules + manual " / " cuts)
+  // full text, wrapped; board-wide mode decides which side is blanked:
+  // pattern mode blanks the phrases, phrase mode blanks the patterns;
+  // one ♪ per TTS segment, same segmentation rules as cards (incl. " / ")
+  const phraseMode=state.pbMode==='phrase';
   const parsed=parseCuts(e.fullText||'');
   const text=parsed.text;
   const pats=(e.patterns||[]).map(it=>({zh:it.zh||'',spans:matchPattern(text,it.en).spans}));
@@ -1085,11 +1094,15 @@ function renderDailyRowHtml(e){
     while(i<re2){
       const o=owner[i];let j=i+1;while(j<re2&&owner[j]===o)j++;
       const chunk=text.slice(i,j);
-      if(o>=0&&o<pats.length){
-        out+='<span class="hl" data-zh="'+escAttr(items[o].zh)+'">'+escHtml(chunk)+'</span>';
-      }else if(o>=0){
-        const w=Math.min(Math.max(chunk.replace(/\s+/g,' ').length,2),8);
-        out+='<span class="hl phw" data-zh="'+escAttr(items[o].zh)+'"><span class="blank" style="--w:'+w+'ch"><span class="bt">'+escHtml(chunk)+'</span></span></span>';
+      if(o>=0){
+        const isPat=o<pats.length;
+        const visible=phraseMode?!isPat:isPat;
+        if(visible){
+          out+='<span class="hl" data-zh="'+escAttr(items[o].zh)+'">'+escHtml(chunk)+'</span>';
+        }else{
+          const w=Math.min(Math.max(chunk.replace(/\s+/g,' ').length,2),8);
+          out+='<span class="hl phw" data-zh="'+escAttr(items[o].zh)+'"><span class="blank" style="--w:'+w+'ch"><span class="bt">'+escHtml(chunk)+'</span></span></span>';
+        }
       }else{
         out+=spacesToHtml(chunk);
       }
@@ -1110,34 +1123,52 @@ function renderDailyRowHtml(e){
   if(cursor<text.length)html+=emit(cursor,text.length);
   return html;
 }
+let dragDailyId=null;
+function moveDaily(srcId,targetId,after){
+  if(!srcId||srcId===targetId)return;
+  const si=state.daily.findIndex(x=>x.id===srcId);if(si<0)return;
+  const [it]=state.daily.splice(si,1);
+  const ti=state.daily.findIndex(x=>x.id===targetId);
+  if(ti<0)state.daily.push(it);
+  else state.daily.splice(after?ti+1:ti,0,it);
+  save();renderMain();
+}
 function renderDailyBoard(){
   const shown=state.daily.filter(e=>!state.pbFavOnly||e.fav);
-  let rows='';
+  let itemsHtml='';
   for(const e of shown){
-    const hasCloze=(e.patterns&&e.patterns.length)||(e.phrases&&e.phrases.length);
-    rows+='<div class="pb-row" data-id="'+e.id+'">'
+    itemsHtml+='<div class="card pb-item" data-id="'+e.id+'">'
+      +'<button class="pb-drag" title="拖动排序" aria-label="拖动排序">⠿</button>'
       +'<button class="pstar'+(e.fav?' on':'')+'" aria-label="收藏这条"></button>'
       +'<div class="pb-main"><div class="pb-en">'+renderDailyRowHtml(e)+'</div>'
       +(e.zh?'<div class="pb-zh"'+(state.pbShowZh?'':' hidden')+'>'+escHtml(e.zh)+'</div>':'')
       +'</div>'
-      +'<button class="pb-act pb-open" title="'+(hasCloze?'打开练习（含句型/短语挖空）':'打开练习')+'">›</button>'
+      +'<button class="pb-act pb-open" title="打开完整练习页">›</button>'
       +'<button class="pb-act pb-edit" title="编辑这条">✎</button>'
       +'<button class="pb-act pb-del" title="删除这条">✕</button>'
       +'</div>';
   }
-  if(!shown.length)rows='<div class="pb-empty">'+(state.pbFavOnly?'还没有收藏的内容。':'还没有内容，用下面的输入框添加第一条。')+'</div>';
+  if(!shown.length)itemsHtml='<div class="pb-empty">'+(state.pbFavOnly?'还没有收藏的内容。':'还没有内容，用下面的输入框添加第一条。')+'</div>';
   mainInner.innerHTML='<h1 class="ans-title">日常用语</h1>'
-    +'<div class="controls"><div class="aux" style="margin-left:0;">'
+    +'<div class="controls">'
+    +'<div class="seg">'
+    +'<button data-m="pattern" class="'+(state.pbMode!=='phrase'?'on':'')+'">句型</button>'
+    +'<button data-m="phrase" class="'+(state.pbMode==='phrase'?'on':'')+'">短语</button>'
+    +'</div>'
+    +'<div class="aux">'
     +'<button class="toggle'+(state.pbFavOnly?' on':'')+'" id="pbFav">只看收藏</button>'
     +'<button class="toggle'+(state.pbShowZh?' on':'')+'" id="pbZh">显示中文</button>'
     +'</div></div>'
-    +'<div class="card pb-card">'+rows
-    +'<div class="pb-add">'
+    +'<div id="pbList">'+itemsHtml+'</div>'
+    +'<div class="card pb-add-card"><div class="pb-add">'
     +'<input class="f" id="pbEn" placeholder="英语内容">'
     +'<textarea class="f" id="pbPP" rows="2" placeholder="粘贴 句型 / 短语 列表（可留空，自动识别）"></textarea>'
     +'<button class="btn primary" id="pbAdd">添加</button>'
     +'</div></div>'
-    +'<p class="pb-hint">短语默认挖空，点空白显示；悬停句型和短语看中文；每个 ♪ 朗读一段，分段规则与卡片一致（含 " / " 手动切分）。粘贴框支持「句型/短语」自动识别，Ctrl+回车添加。</p>';
+    +'<p class="pb-hint">句型模式挖短语，短语模式挖句型；点空白显示，悬停看中文；每个 ♪ 朗读一段（分段规则与卡片一致，含 " / " 手动切分）；拖 ⠿ 排序，› 打开完整练习页。粘贴框支持「句型/短语」自动识别，Ctrl+回车添加。</p>';
+  mainInner.querySelectorAll('.controls .seg button').forEach(b=>{
+    b.onclick=()=>{state.pbMode=b.dataset.m;save();renderMain();};
+  });
   document.getElementById('pbFav').onclick=()=>{state.pbFavOnly=!state.pbFavOnly;save();renderMain();};
   document.getElementById('pbZh').onclick=()=>{state.pbShowZh=!state.pbShowZh;save();renderMain();};
   const addRow=()=>{
@@ -1146,10 +1177,10 @@ function renderDailyBoard(){
     if(!en)return;
     let patterns=[],phrases=[];
     if(raw.trim()){
-      const r=parsePasted(raw);                       // recognises 句型/短语 section headers
+      const r=parsePasted(raw);
       patterns=textToItems(r.patterns.join('\n'));
       phrases=textToItems(r.phrases.join('\n'));
-      if(!patterns.length&&!phrases.length)phrases=textToItems(raw); // headerless lines default to phrases
+      if(!patterns.length&&!phrases.length)phrases=textToItems(raw);
     }
     state.daily.push({id:uid(),fullText:en,zh:'',patterns,phrases,fav:false});
     save();renderAll();
@@ -1158,13 +1189,14 @@ function renderDailyBoard(){
   document.getElementById('pbAdd').onclick=addRow;
   document.getElementById('pbEn').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();document.getElementById('pbPP').focus();}});
   document.getElementById('pbPP').addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();addRow();}});
-  const cardEl=mainInner.querySelector('.pb-card');
-  cardEl.addEventListener('click',e=>{
+  const listEl=document.getElementById('pbList');
+  const clearMarks=()=>listEl.querySelectorAll('.drop-above,.drop-below').forEach(n=>n.classList.remove('drop-above','drop-below'));
+  listEl.addEventListener('click',e=>{
     if(e.target.closest('.abtn'))return;   // shared audio listener handles playback
-    if(e.target.closest('.pb-add'))return;
-    const row=e.target.closest('.pb-row');if(!row)return;
+    const row=e.target.closest('.pb-item');if(!row)return;
     const id=row.dataset.id;
     const entry=state.daily.find(x=>x.id===id);if(!entry)return;
+    if(e.target.closest('.pb-drag'))return;
     if(e.target.closest('.pstar')){entry.fav=!entry.fav;save();renderMain();return;}
     if(e.target.closest('.pb-open')){state.dailyOpen=id;save();renderMain();return;}
     if(e.target.closest('.pb-edit')){openDailyEditor(id);return;}
@@ -1177,6 +1209,33 @@ function renderDailyBoard(){
       const zhEl=row.querySelector('.pb-zh');
       if(zhEl)zhEl.hidden=!zhEl.hidden;
     }
+  });
+  // drag to reorder: only via the ⠿ handle so text stays selectable
+  listEl.querySelectorAll('.pb-item').forEach(el=>{
+    const handle=el.querySelector('.pb-drag');
+    handle.addEventListener('mousedown',()=>{el.draggable=true;});
+    el.addEventListener('mouseup',()=>{el.draggable=false;});
+    el.addEventListener('dragstart',ev=>{
+      dragDailyId=el.dataset.id;el.classList.add('dragging');
+      ev.dataTransfer.effectAllowed='move';
+      try{ev.dataTransfer.setData('text/plain',el.dataset.id);}catch(_){}
+    });
+    el.addEventListener('dragend',()=>{dragDailyId=null;el.draggable=false;el.classList.remove('dragging');clearMarks();});
+    el.addEventListener('dragover',ev=>{
+      if(!dragDailyId||dragDailyId===el.dataset.id)return;
+      ev.preventDefault();ev.dataTransfer.dropEffect='move';
+      const r=el.getBoundingClientRect();
+      const below=(ev.clientY-r.top)>r.height/2;
+      el.classList.toggle('drop-below',below);
+      el.classList.toggle('drop-above',!below);
+    });
+    el.addEventListener('dragleave',()=>el.classList.remove('drop-above','drop-below'));
+    el.addEventListener('drop',ev=>{
+      ev.preventDefault();
+      const below=el.classList.contains('drop-below');
+      clearMarks();
+      moveDaily(dragDailyId,el.dataset.id,below);
+    });
   });
   if(typeof markCached==='function')markCached();
 }
