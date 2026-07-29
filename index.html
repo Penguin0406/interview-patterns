@@ -275,7 +275,7 @@
   /* ---------- phrasebook ---------- */
   .pb-card{padding:6px 24px 18px;font-family:var(--sans);font-size:15px;line-height:1.5;}
   .pb-row{display:flex;align-items:flex-start;gap:9px;padding:13px 0;border-bottom:1px solid var(--line);}
-  .pb-row .abtn{font-size:15px;margin-top:4px;}
+  .pb-en .abtn{font-size:.72em;}
   .pstar{border:none;background:none;cursor:pointer;padding:2px;line-height:1;
          font-size:15px;color:var(--faint);margin-top:3px;border-radius:5px;flex:0 0 auto;}
   .pstar::before{content:"☆";}
@@ -1069,8 +1069,10 @@ function deleteDaily(id,skip){
 }
 function renderDailyRowHtml(e){
   // full text, wrapped; phrases blanked out (click to reveal), patterns and
-  // plain text visible; both patterns and revealed phrases carry zh tooltips
-  const text=parseCuts(e.fullText||'').text;
+  // plain text visible, zh tooltips on both; one ♪ per TTS segment, using the
+  // exact same segmentation rules as cards (auto rules + manual " / " cuts)
+  const parsed=parseCuts(e.fullText||'');
+  const text=parsed.text;
   const pats=(e.patterns||[]).map(it=>({zh:it.zh||'',spans:matchPattern(text,it.en).spans}));
   const phrs=(e.phrases||[]).map(it=>({zh:it.zh||'',spans:findAll(text,it.en)}));
   const items=pats.concat(phrs);
@@ -1078,20 +1080,34 @@ function renderDailyRowHtml(e){
   items.forEach((it,idx)=>it.spans.forEach(sp=>{
     for(let i=sp.start;i<sp.end&&i<text.length;i++)if(owner[i]===-1)owner[i]=idx;
   }));
-  let html='',i=0;
-  while(i<text.length){
-    const o=owner[i];let j=i+1;while(j<text.length&&owner[j]===o)j++;
-    const chunk=text.slice(i,j);
-    if(o>=0&&o<pats.length){
-      html+='<span class="hl" data-zh="'+escAttr(items[o].zh)+'">'+escHtml(chunk)+'</span>';
-    }else if(o>=0){
-      const w=Math.min(Math.max(chunk.replace(/\s+/g,' ').length,2),8);
-      html+='<span class="hl phw" data-zh="'+escAttr(items[o].zh)+'"><span class="blank" style="--w:'+w+'ch"><span class="bt">'+escHtml(chunk)+'</span></span></span>';
-    }else{
-      html+=spacesToHtml(chunk);
+  function emit(rs,re2){
+    let out='',i=rs;
+    while(i<re2){
+      const o=owner[i];let j=i+1;while(j<re2&&owner[j]===o)j++;
+      const chunk=text.slice(i,j);
+      if(o>=0&&o<pats.length){
+        out+='<span class="hl" data-zh="'+escAttr(items[o].zh)+'">'+escHtml(chunk)+'</span>';
+      }else if(o>=0){
+        const w=Math.min(Math.max(chunk.replace(/\s+/g,' ').length,2),8);
+        out+='<span class="hl phw" data-zh="'+escAttr(items[o].zh)+'"><span class="blank" style="--w:'+w+'ch"><span class="bt">'+escHtml(chunk)+'</span></span></span>';
+      }else{
+        out+=spacesToHtml(chunk);
+      }
+      i=j;
     }
-    i=j;
+    return out;
   }
+  const segs=ttsSegments(text,parsed.cuts);
+  let html='',cursor=0;
+  for(const g of segs){
+    if(g.start>cursor)html+=emit(cursor,g.start);
+    html+=emit(Math.max(g.start,cursor),g.end);
+    const stext=text.slice(g.start,g.end).trim();
+    if(stext.replace(/[^A-Za-z\u00C0-\u017F]/g,'').length>1)
+      html+='<button class="abtn" data-t="'+escAttr(stext)+'" title="朗读这一段" aria-label="朗读这一段"></button>';
+    cursor=Math.max(cursor,g.end);
+  }
+  if(cursor<text.length)html+=emit(cursor,text.length);
   return html;
 }
 function renderDailyBoard(){
@@ -1100,7 +1116,6 @@ function renderDailyBoard(){
   for(const e of shown){
     const hasCloze=(e.patterns&&e.patterns.length)||(e.phrases&&e.phrases.length);
     rows+='<div class="pb-row" data-id="'+e.id+'">'
-      +'<button class="abtn" data-t="'+escAttr(parseCuts(e.fullText||'').text)+'" title="朗读" aria-label="朗读"></button>'
       +'<button class="pstar'+(e.fav?' on':'')+'" aria-label="收藏这条"></button>'
       +'<div class="pb-main"><div class="pb-en">'+renderDailyRowHtml(e)+'</div>'
       +(e.zh?'<div class="pb-zh"'+(state.pbShowZh?'':' hidden')+'>'+escHtml(e.zh)+'</div>':'')
@@ -1122,7 +1137,7 @@ function renderDailyBoard(){
     +'<textarea class="f" id="pbPP" rows="2" placeholder="粘贴 句型 / 短语 列表（可留空，自动识别）"></textarea>'
     +'<button class="btn primary" id="pbAdd">添加</button>'
     +'</div></div>'
-    +'<p class="pb-hint">短语默认挖空，点空白显示；悬停句型和短语看中文；› 打开完整练习页。右侧粘贴框支持整段「句型/短语」自动识别，Ctrl+回车添加。</p>';
+    +'<p class="pb-hint">短语默认挖空，点空白显示；悬停句型和短语看中文；每个 ♪ 朗读一段，分段规则与卡片一致（含 " / " 手动切分）。粘贴框支持「句型/短语」自动识别，Ctrl+回车添加。</p>';
   document.getElementById('pbFav').onclick=()=>{state.pbFavOnly=!state.pbFavOnly;save();renderMain();};
   document.getElementById('pbZh').onclick=()=>{state.pbShowZh=!state.pbShowZh;save();renderMain();};
   const addRow=()=>{
