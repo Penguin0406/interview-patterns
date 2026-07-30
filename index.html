@@ -137,6 +137,9 @@
   .qitem.drop-above{box-shadow:0 -2.5px 0 0 var(--phr-ink);}
   .qitem.drop-below{box-shadow:0 2.5px 0 0 var(--phr-ink);}
   .ghead.drop-into{background:var(--hover);color:var(--ink);outline:1.5px dashed var(--faint);outline-offset:-2px;}
+  .ghead.dragging{opacity:.45;}
+  .ghead.drop-above{box-shadow:0 -2.5px 0 0 var(--phr-ink);}
+  .ghead.drop-below{box-shadow:0 2.5px 0 0 var(--phr-ink);}
 
   /* ---------- main ---------- */
   .main{overflow-y:auto;min-height:0;}
@@ -645,7 +648,7 @@ function matchPattern(text,pat){
    ============================================================ */
 const LS_KEY='interview_practice_v1';
 const DEF_TITLE='流畅表达任何事';
-let state={answers:[],selectedId:null,mode:'full',showZh:false,revealAll:false,openGroup:null,pbShowZh:false,pbFavOnly:false,pbMode:'pattern',daily:[],dailyOpen:null,appTitle:DEF_TITLE,favOnlySent:false};
+let state={answers:[],selectedId:null,mode:'full',showZh:false,revealAll:false,openGroup:null,pbShowZh:false,pbFavOnly:false,pbMode:'pattern',daily:[],dailyOpen:null,appTitle:DEF_TITLE,favOnlySent:false,groupOrder:[]};
 
 function uid(){return 'a'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
 
@@ -714,7 +717,8 @@ function load(){
       if(d.pbMode==='phrase'||d.pbMode==='pattern'||d.pbMode==='full')state.pbMode=d.pbMode;
       if(Array.isArray(d.daily))state.daily=d.daily;
       if('dailyOpen'in d)state.dailyOpen=d.dailyOpen;
-      if(typeof d.appTitle==='string'&&d.appTitle.trim())state.appTitle=d.appTitle.trim();}
+      if(typeof d.appTitle==='string'&&d.appTitle.trim())state.appTitle=d.appTitle.trim();
+      if(Array.isArray(d.groupOrder))state.groupOrder=d.groupOrder;}
   }catch(e){}
   if(!state.answers.length&&!state.daily.length)state.answers=seedData();
   migratePhrasebooks();
@@ -726,7 +730,7 @@ function load(){
   }
 }
 function save(){
-  try{localStorage.setItem(LS_KEY,JSON.stringify({answers:state.answers,selectedId:state.selectedId,showZh:state.showZh,openGroup:state.openGroup,pbShowZh:state.pbShowZh,pbFavOnly:state.pbFavOnly,pbMode:state.pbMode,daily:state.daily,dailyOpen:state.dailyOpen,appTitle:state.appTitle}));}catch(e){}
+  try{localStorage.setItem(LS_KEY,JSON.stringify({answers:state.answers,selectedId:state.selectedId,showZh:state.showZh,openGroup:state.openGroup,pbShowZh:state.pbShowZh,pbFavOnly:state.pbFavOnly,pbMode:state.pbMode,daily:state.daily,dailyOpen:state.dailyOpen,appTitle:state.appTitle,groupOrder:state.groupOrder}));}catch(e){}
 }
 
 /* ============================================================
@@ -932,7 +936,24 @@ function groupOf(a){return (a.group||'').trim()||UNGROUPED;}
 function allGroups(){
   const s=[];state.answers.forEach(a=>{const g=groupOf(a);if(g!==UNGROUPED&&g!==FAV&&!s.includes(g))s.push(g);});return s;
 }
-let dragId=null;
+let dragId=null,dragGroup=null;
+// groupOrder holds the user's drag order; unknown groups append in first-appearance order
+function orderedGroupNames(names){
+  const known=state.groupOrder.filter(g=>names.includes(g));
+  const rest=names.filter(g=>!known.includes(g));
+  return known.concat(rest);
+}
+function moveGroup(src,target,after){
+  if(!src||src===target||src===UNGROUPED||target===UNGROUPED)return;
+  const all=[];
+  state.answers.forEach(a=>{const g=groupOf(a);if(g!==UNGROUPED&&!all.includes(g))all.push(g);});
+  let order=orderedGroupNames(all);
+  order=order.filter(g=>g!==src);
+  const ti=order.indexOf(target);
+  if(ti<0)order.push(src);else order.splice(after?ti+1:ti,0,src);
+  state.groupOrder=order;
+  save();renderSidebar();
+}
 function clearDropMarks(){
   qlist.querySelectorAll('.drop-above,.drop-below,.drop-into').forEach(n=>n.classList.remove('drop-above','drop-below','drop-into'));
 }
@@ -1037,8 +1058,8 @@ function renderSidebar(){
   qlist.appendChild(dq);
   const groups=new Map();
   state.answers.forEach(a=>{const g=groupOf(a);if(!groups.has(g))groups.set(g,[]);groups.get(g).push(a);});
-  const names=[...groups.keys()].filter(g=>g!==UNGROUPED);
-  if(groups.has(UNGROUPED))names.push(UNGROUPED);
+  const names=orderedGroupNames([...groups.keys()].filter(g=>g!==UNGROUPED));
+  if(groups.has(UNGROUPED))names.push(UNGROUPED); // 未分组 always last
   const favs=state.answers.filter(a=>a.fav);
   const sections=[];
   if(favs.length)sections.push({name:FAV,list:favs,virtual:true});
@@ -1064,13 +1085,40 @@ function renderSidebar(){
         if(nn===null)return;
         const newName=nn.trim();
         state.answers.forEach(a=>{if(groupOf(a)===gname)a.group=newName;});
+        const oi=state.groupOrder.indexOf(gname);
+        if(oi>=0){if(newName)state.groupOrder[oi]=newName;else state.groupOrder.splice(oi,1);}
         if(state.openGroup===gname)state.openGroup=newName||null;
         save();renderAll();
       };
       if(!sec.virtual){
-        gh.addEventListener('dragover',e=>{if(!dragId)return;e.preventDefault();e.dataTransfer.dropEffect='move';gh.classList.add('drop-into');});
-        gh.addEventListener('dragleave',()=>gh.classList.remove('drop-into'));
-        gh.addEventListener('drop',e=>{e.preventDefault();clearDropMarks();moveToGroup(dragId,gname);});
+        if(gname!==UNGROUPED){
+          gh.draggable=true;
+          gh.addEventListener('dragstart',e=>{
+            dragGroup=gname;gh.classList.add('dragging');
+            e.dataTransfer.effectAllowed='move';
+            try{e.dataTransfer.setData('text/plain','group:'+gname);}catch(_){}
+          });
+          gh.addEventListener('dragend',()=>{dragGroup=null;gh.classList.remove('dragging');clearDropMarks();});
+        }
+        gh.addEventListener('dragover',e=>{
+          if(dragGroup&&dragGroup!==gname&&gname!==UNGROUPED){
+            e.preventDefault();e.dataTransfer.dropEffect='move';
+            const r=gh.getBoundingClientRect();
+            const below=(e.clientY-r.top)>r.height/2;
+            gh.classList.toggle('drop-below',below);
+            gh.classList.toggle('drop-above',!below);
+            return;
+          }
+          if(dragId){e.preventDefault();e.dataTransfer.dropEffect='move';gh.classList.add('drop-into');}
+        });
+        gh.addEventListener('dragleave',()=>gh.classList.remove('drop-into','drop-above','drop-below'));
+        gh.addEventListener('drop',e=>{
+          e.preventDefault();
+          const below=gh.classList.contains('drop-below');
+          clearDropMarks();
+          if(dragGroup)moveGroup(dragGroup,gname,below);
+          else moveToGroup(dragId,gname);
+        });
       }
       qlist.appendChild(gh);
     }
