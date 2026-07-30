@@ -764,8 +764,9 @@ function computeItems(answer,kind,textOverride){
   });
 }
 
-function renderFull(text,cuts){
+function renderFull(text,cuts,fav){
   const segs=ttsSegments(text,cuts);
+  const sents=sentenceSpans(text);
   const paras=[];{
     let re=/\n{2,}/g,last=0,m;
     while((m=re.exec(text))){paras.push([last,m.index]);last=m.index+m[0].length;}
@@ -775,14 +776,27 @@ function renderFull(text,cuts){
   for(const [ps,pe] of paras){
     if(pe<=ps)continue;
     let out='';
-    for(const g of segs){
-      const ss=Math.max(g.start,ps),se=Math.min(g.end,pe);
+    for(let s=0;s<sents.length;s++){
+      const ss=Math.max(sents[s].start,ps),se=Math.min(sents[s].end,pe);
       if(se<=ss)continue;
-      const raw=text.slice(ss,se);
-      out+=spacesToHtml(raw);
-      const stext=raw.trim();
-      if(stext.replace(/[^A-Za-z\u00C0-\u017F]/g,'').length>1)
-        out+='<button class="abtn" data-t="'+escAttr(stext)+'" title="朗读这一段" aria-label="朗读这一段"></button>';
+      let mySegs=segs.filter(g=>g.start>=sents[s].start&&g.end<=sents[s].end);
+      if(!mySegs.length)mySegs=[{start:sents[s].start,end:sents[s].end}];
+      let sentHtml='';
+      for(const g of mySegs){
+        const gs=Math.max(g.start,ps),ge=Math.min(g.end,pe);
+        if(ge<=gs)continue;
+        sentHtml+=spacesToHtml(text.slice(gs,ge));
+        const stext=text.slice(g.start,g.end).trim();
+        if(stext.replace(/[^A-Za-z\u00C0-\u017F]/g,'').length>1)
+          sentHtml+='<button class="abtn" data-t="'+escAttr(stext)+'" title="朗读这一段" aria-label="朗读这一段"></button>';
+      }
+      // same sentence key as the cloze modes, so favorites stay in sync across 全文/句型/短语
+      const sKey=text.slice(sents[s].start,sents[s].end).replace(/\s+/g,' ').trim();
+      const isFav=!!(fav&&fav.set.has(sKey));
+      if(sKey.replace(/[^A-Za-z\u00C0-\u017F]/g,'').length>1)
+        sentHtml+='<button class="fstar'+(isFav?' on':'')+'" data-k="'+escAttr(sKey)+'" title="收藏本句" aria-label="收藏本句"></button>';
+      if(fav&&fav.only&&!isFav)out+='<span class="sent-off">'+sentHtml+'</span>';
+      else out+=sentHtml;
     }
     html+='<p>'+out+'</p>';
   }
@@ -1345,7 +1359,7 @@ function renderCardView(a,isDaily){
   const favInfo={set:new Set(a.sentFavs||[]),only:!!state.favOnlySent};
   let bodyHtml,footHtml='';
   if(mode==='full'){
-    bodyHtml=renderFull(parsed.text,parsed.cuts);
+    bodyHtml=renderFull(parsed.text,parsed.cuts,favInfo);
   }else{
     const kind=mode==='pattern'?'pattern':'phrase';
     const items=computeItems(a,kind,parsed.text);
@@ -1370,7 +1384,7 @@ function renderCardView(a,isDaily){
         '<button data-m="phrase" class="'+(mode==='phrase'?'on':'')+'">短语</button>'+
       '</div>'+
       '<div class="aux">'+
-        '<button class="toggle'+(state.favOnlySent?' on':'')+'" id="tFavOnly"'+(mode==='full'?' hidden':'')+'>只看收藏</button>'+
+        '<button class="toggle'+(state.favOnlySent?' on':'')+'" id="tFavOnly">只看收藏</button>'+
         '<button class="toggle'+(state.revealAll?' on':'')+'" id="tReveal"'+(mode==='full'?' hidden':'')+'>显示全部原文</button>'+
         '<button class="toggle'+(state.showZh?' on':'')+'" id="tZh"'+(mode==='full'?' hidden':'')+'>显示中文</button>'+
       '</div>'+
@@ -1886,8 +1900,8 @@ async function markCached(){
 /* ---- gamepad ---- */
 // button numbering differs across controllers, so bindings are captured by
 // pressing the key rather than picked from a fixed list
-const DEF_PAD={enabled:true,prev:'b14',next:'b15',play:'b2',replay:'b1'};
-const PAD_ACTIONS=[['prev','上一句'],['next','下一句'],['play','播放/暂停'],['replay','重播']];
+const DEF_PAD={enabled:true,prev:'b14',next:'b15',play:'b2',replay:'b1',regen:'b3'};
+const PAD_ACTIONS=[['prev','上一句'],['next','下一句'],['play','播放/暂停'],['replay','重播'],['regen','重新生成']];
 function getPad(){return {...DEF_PAD,...(getCfg().pad||{})};}
 function setPad(patch){const c=getCfg();c.pad={...getPad(),...patch};setCfg(c);}
 function padLabel(code){
@@ -1919,6 +1933,7 @@ function padScan(){
           else if(c===pd.next)stepAudio(1);
           else if(c===pd.play){if(audio.paused)audio.play().catch(()=>{});else audio.pause();}
           else if(c===pd.replay&&audio.src){loopStart=0;loopLeft=0;audio.currentTime=0;audio.play().catch(()=>{});}
+          else if(c===pd.regen){const rb=currentAudioBtn();if(rb)playSentence(rb,true);}
         }
       }
     }
