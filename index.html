@@ -1786,11 +1786,25 @@ audio.addEventListener('loadedmetadata',updTime);
 audio.addEventListener('play',()=>{$('pPlay').classList.add('on');if(curBtn)curBtn.classList.add('playing');});
 audio.addEventListener('pause',()=>{$('pPlay').classList.remove('on');if(curBtn)curBtn.classList.remove('playing');});
 audio.addEventListener('ended',()=>{
+  seeking=false;
   if(loopLeft>0){loopLeft--;audio.currentTime=loopStart;audio.play().catch(()=>{});return;}
   loopStart=0;
   $('pPlay').classList.remove('on');if(curBtn)curBtn.classList.remove('playing');
 });
 $('pPlay').onclick=()=>{if(audio.paused)audio.play().catch(()=>{});else audio.pause();};
+function replayFromStart(){
+  if(!audio.src)return;
+  loopStart=0;loopLeft=0;
+  seeking=false;                 // a stuck drag flag froze the slider at the end
+  try{audio.currentTime=0;}catch(e){}
+  $('pSeek').value=0;            // move the slider now, don't wait for timeupdate
+  updTime();
+  audio.play().catch(()=>{});
+}
+// a drag that ends off-slider can leave seeking=true forever; always release it
+['pointerup','touchend','touchcancel','mouseup','blur'].forEach(ev=>{
+  window.addEventListener(ev,()=>{seeking=false;},true);
+});
 $('pSeek').addEventListener('input',()=>{seeking=true;if(audio.duration)$('pTime').textContent=fmt($('pSeek').value/1000*audio.duration)+' / '+fmt(audio.duration);});
 $('pSeek').addEventListener('change',()=>{
   if(audio.duration){
@@ -1815,6 +1829,19 @@ function currentAudioBtn(){
   if(lastText==null)return null;
   return allAudioBtns().find(b=>b.dataset.t===lastText)||null; // mode switch rebuilt the DOM: relocate by text
 }
+function toggleFavCurrent(){
+  const b=currentAudioBtn();if(!b)return;
+  const all=[...mainInner.querySelectorAll('.abtn,.fstar')];
+  const i=all.indexOf(b);
+  if(i>=0){
+    for(let j=i+1;j<all.length;j++){
+      if(all[j].classList.contains('fstar')){all[j].click();return;}
+    }
+  }
+  const row=b.closest('.pb-item');      // daily board: whole entry is the unit
+  const ps=row&&row.querySelector('.pstar');
+  if(ps)ps.click();
+}
 function stepAudio(dir){
   const list=allAudioBtns();if(!list.length)return;
   const cur=currentAudioBtn();
@@ -1826,7 +1853,7 @@ function stepAudio(dir){
 }
 $('pPrev').onclick=()=>stepAudio(-1);
 $('pNext').onclick=()=>stepAudio(1);
-$('pReplay').onclick=()=>{if(audio.src){loopStart=0;loopLeft=0;audio.currentTime=0;audio.play().catch(()=>{});}};
+$('pReplay').onclick=()=>{replayFromStart();};
 // keyboard transport: ← prev, → next, Enter replay — main window only
 // clicking a button leaves it focused, so transport buttons release focus after use;
 // arrows stay active even when a button is focused (buttons don't use arrow keys)
@@ -1846,7 +1873,7 @@ document.addEventListener('keydown',e=>{
     e.preventDefault();                               // Space would otherwise scroll the page
     if(!audio.src)return;
     if(e.key===' '){if(audio.paused)audio.play().catch(()=>{});else audio.pause();}
-    else{loopStart=0;loopLeft=0;audio.currentTime=0;audio.play().catch(()=>{});}
+    else{replayFromStart();}
     return;
   }
   e.preventDefault();
@@ -1900,8 +1927,8 @@ async function markCached(){
 /* ---- gamepad ---- */
 // button numbering differs across controllers, so bindings are captured by
 // pressing the key rather than picked from a fixed list
-const DEF_PAD={enabled:true,prev:'b14',next:'b15',play:'b2',replay:'b1',regen:'b3'};
-const PAD_ACTIONS=[['prev','上一句'],['next','下一句'],['play','播放/暂停'],['replay','重播'],['regen','重新生成']];
+const DEF_PAD={enabled:true,prev:'b14',next:'b15',play:'b2',replay:'b1',regen:'b3',fav:'b0'};
+const PAD_ACTIONS=[['prev','上一句'],['next','下一句'],['play','播放/暂停'],['replay','重播'],['regen','重新生成'],['fav','收藏本句']];
 function getPad(){return {...DEF_PAD,...(getCfg().pad||{})};}
 function setPad(patch){const c=getCfg();c.pad={...getPad(),...patch};setCfg(c);}
 function padLabel(code){
@@ -1932,8 +1959,9 @@ function padScan(){
           if(c===pd.prev)stepAudio(-1);
           else if(c===pd.next)stepAudio(1);
           else if(c===pd.play){if(audio.paused)audio.play().catch(()=>{});else audio.pause();}
-          else if(c===pd.replay&&audio.src){loopStart=0;loopLeft=0;audio.currentTime=0;audio.play().catch(()=>{});}
+          else if(c===pd.replay){replayFromStart();}
           else if(c===pd.regen){const rb=currentAudioBtn();if(rb)playSentence(rb,true);}
+          else if(c===pd.fav){toggleFavCurrent();}
         }
       }
     }
