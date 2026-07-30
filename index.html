@@ -213,6 +213,14 @@
         color:var(--faint);padding:0 4px;margin-left:3px;font-size:.78em;
         display:inline-block;vertical-align:middle;line-height:1;border-radius:6px;}
   .sbtn::before{content:"○";}
+  .fstar{border:none;background:none;cursor:pointer;font-family:var(--sans);
+         color:var(--faint);padding:0 4px;margin-left:1px;font-size:.72em;
+         display:inline-block;vertical-align:middle;line-height:1;border-radius:6px;}
+  .fstar::before{content:"☆";}
+  .fstar.on::before{content:"★";}
+  .fstar:hover{color:var(--ink);background:var(--hover);}
+  .fstar.on{color:var(--pat-ink);}
+  .sent-off,.sent-off *{visibility:hidden !important;}
   .sbtn.on::before{content:"●";}
   .sbtn:hover{color:var(--ink);background:var(--hover);}
   .sbtn.on{color:var(--phr-ink);}
@@ -372,6 +380,7 @@
     .cnt-n{font-size:12.5px;min-width:20px;}
     .sbtn{font-size:.86em;padding:3px 6px;}
     .abtn{font-size:.86em;padding:3px 6px;}
+    .fstar{font-size:.8em;padding:3px 6px;}
     .player{position:fixed;left:10px;right:10px;bottom:calc(10px + env(safe-area-inset-bottom));
             max-width:none;margin:0;padding:9px 10px;gap:8px;z-index:40;
             box-shadow:0 4px 18px rgba(0,0,0,.22);}
@@ -636,7 +645,7 @@ function matchPattern(text,pat){
    ============================================================ */
 const LS_KEY='interview_practice_v1';
 const DEF_TITLE='流畅表达任何事';
-let state={answers:[],selectedId:null,mode:'full',showZh:false,revealAll:false,openGroup:null,pbShowZh:false,pbFavOnly:false,pbMode:'pattern',daily:[],dailyOpen:null,appTitle:DEF_TITLE};
+let state={answers:[],selectedId:null,mode:'full',showZh:false,revealAll:false,openGroup:null,pbShowZh:false,pbFavOnly:false,pbMode:'pattern',daily:[],dailyOpen:null,appTitle:DEF_TITLE,favOnlySent:false};
 
 function uid(){return 'a'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
 
@@ -833,7 +842,7 @@ function segmentAuto(text,A,B,out){
   for(const [a,b] of merged)out.push({start:A+a,end:A+b});
 }
 
-function renderMasked(text,items,cuts){
+function renderMasked(text,items,cuts,fav){
   // owner map: first-wins
   const owner=new Int16Array(text.length).fill(-1);
   items.forEach((it,idx)=>it.spans.forEach(sp=>{
@@ -886,17 +895,25 @@ function renderMasked(text,items,cuts){
       const st={hasBlank:false};
       let mySegs=allSegs.filter(g=>g.start>=sents[s].start&&g.end<=sents[s].end);
       if(!mySegs.length)mySegs=[{start:sents[s].start,end:sents[s].end}];
+      let sentHtml='';
       for(let gi=0;gi<mySegs.length;gi++){
         const gs=Math.max(mySegs[gi].start,ps),ge=Math.min(mySegs[gi].end,pe);
         if(ge<=gs)continue;
-        seg+=emitRange(gs,ge,s,st);
+        sentHtml+=emitRange(gs,ge,s,st);
         const isLastSeg=gi===mySegs.length-1;
         if(isLastSeg&&st.hasBlank)
-          seg+='<button class="sbtn" data-s="'+s+'" title="显示/隐藏本句被挖空的内容" aria-label="显示或隐藏本句被挖空的内容"></button>';
+          sentHtml+='<button class="sbtn" data-s="'+s+'" title="显示/隐藏本句被挖空的内容" aria-label="显示或隐藏本句被挖空的内容"></button>';
         const stext=text.slice(mySegs[gi].start,mySegs[gi].end).trim();
         if(stext.replace(/[^A-Za-z\u00C0-\u017F]/g,'').length>1)
-          seg+='<button class="abtn" data-t="'+escAttr(stext)+'" title="朗读这一段" aria-label="朗读这一段"></button>';
+          sentHtml+='<button class="abtn" data-t="'+escAttr(stext)+'" title="朗读这一段" aria-label="朗读这一段"></button>';
       }
+      const sKey=text.slice(sents[s].start,sents[s].end).replace(/\s+/g,' ').trim();
+      const isFav=!!(fav&&fav.set.has(sKey));
+      if(sKey.replace(/[^A-Za-z\u00C0-\u017F]/g,'').length>1)
+        sentHtml+='<button class="fstar'+(isFav?' on':'')+'" data-k="'+escAttr(sKey)+'" title="收藏本句" aria-label="收藏本句"></button>';
+      // filter: non-favorited sentences hide in place, keeping their position
+      if(fav&&fav.only&&!isFav)seg+='<span class="sent-off">'+sentHtml+'</span>';
+      else seg+=sentHtml;
     }
     html+='<p>'+seg+'</p>';
   }
@@ -1262,6 +1279,7 @@ function renderMain(){
 function renderCardView(a,isDaily){
   const mode=state.mode;
   const parsed=parseCuts(a.fullText||''); // markers hidden from display and matching
+  const favInfo={set:new Set(a.sentFavs||[]),only:!!state.favOnlySent};
   let bodyHtml,footHtml='';
   if(mode==='full'){
     bodyHtml=renderFull(parsed.text,parsed.cuts);
@@ -1269,7 +1287,7 @@ function renderCardView(a,isDaily){
     const kind=mode==='pattern'?'pattern':'phrase';
     const items=computeItems(a,kind,parsed.text);
     let n=0; items.forEach(it=>{ if(it.spans.length) it.num=++n; });
-    bodyHtml=renderMasked(parsed.text,items,parsed.cuts);
+    bodyHtml=renderMasked(parsed.text,items,parsed.cuts,favInfo);
     const unmatched=items.filter(it=>it.spans.length===0);
     if(unmatched.length){
       footHtml='<div class="footnote">这些'+(mode==='pattern'?'句型':'短语')+'没在全文里找到，练习时已跳过（可能是措辞不同或写错）：<br>'+
@@ -1289,6 +1307,7 @@ function renderCardView(a,isDaily){
         '<button data-m="phrase" class="'+(mode==='phrase'?'on':'')+'">短语</button>'+
       '</div>'+
       '<div class="aux">'+
+        '<button class="toggle'+(state.favOnlySent?' on':'')+'" id="tFavOnly"'+(mode==='full'?' hidden':'')+'>只看收藏</button>'+
         '<button class="toggle'+(state.revealAll?' on':'')+'" id="tReveal"'+(mode==='full'?' hidden':'')+'>显示全部原文</button>'+
         '<button class="toggle'+(state.showZh?' on':'')+'" id="tZh"'+(mode==='full'?' hidden':'')+'>显示中文</button>'+
       '</div>'+
@@ -1304,6 +1323,7 @@ function renderCardView(a,isDaily){
   mainInner.querySelectorAll('.seg button').forEach(b=>{
     b.onclick=()=>{state.mode=b.dataset.m;renderMain();};
   });
+  const tF=document.getElementById('tFavOnly'); if(tF)tF.onclick=()=>{state.favOnlySent=!state.favOnlySent;renderMain();};
   const tR=document.getElementById('tReveal'); if(tR)tR.onclick=()=>{state.revealAll=!state.revealAll;renderMain();};
   const tZ=document.getElementById('tZh'); if(tZ)tZ.onclick=()=>{state.showZh=!state.showZh;save();renderMain();};
   document.getElementById('editInline').onclick=()=>{isDaily?openDailyEditor(a.id):openEditor(a.id);};
@@ -1323,6 +1343,14 @@ function renderCardView(a,isDaily){
     card.addEventListener('click',e=>{
       const ab=e.target.closest('.abtn');
       if(ab){playSentence(ab,false);return;}
+      const fst=e.target.closest('.fstar');
+      if(fst){
+        const k=fst.dataset.k;
+        a.sentFavs=a.sentFavs||[];
+        const i=a.sentFavs.indexOf(k);
+        if(i>=0)a.sentFavs.splice(i,1);else a.sentFavs.push(k);
+        save();renderMain();return;
+      }
       const sb=e.target.closest('.sbtn');
       if(sb){
         const s=sb.dataset.s;
