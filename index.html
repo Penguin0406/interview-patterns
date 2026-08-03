@@ -224,6 +224,17 @@
   .fstar:hover{color:var(--ink);background:var(--hover);}
   .fstar.on{color:var(--pat-ink);}
   .sent-off,.sent-off *{visibility:hidden !important;}
+  .ipa{border-bottom:1px dotted var(--faint);cursor:help;position:relative;}
+  .sent{position:relative;}
+  .ipa[data-ipa]:hover::after,.sent[data-tr]:hover::after{
+    content:attr(data-ipa);position:absolute;left:50%;bottom:calc(100% + 7px);
+    transform:translateX(-50%);font-family:var(--sans);font-size:12.5px;line-height:1.45;
+    background:var(--ink);color:var(--on-ink-fg);padding:6px 10px;border-radius:8px;
+    z-index:6;pointer-events:none;box-shadow:0 3px 12px rgba(0,0,0,.22);
+    max-width:min(420px,80vw);width:max-content;white-space:normal;text-align:left;}
+  .sent[data-tr]:hover::after{content:attr(data-tr);}
+  /* hovering a word shows its phonetics instead of the sentence translation */
+  .sent[data-tr]:has(.ipa:hover)::after{display:none;}
   .sbtn.on::before{content:"●";}
   .sbtn:hover{color:var(--ink);background:var(--hover);}
   .sbtn.on{color:var(--phr-ink);}
@@ -576,6 +587,16 @@
         <label>中文</label>
         <input class="f" id="fDailyZh" placeholder="可留空">
       </div>
+      <div class="field" id="transField">
+        <label>翻译</label>
+        <div class="desc">与全文按句子顺序自动对应；一句一行，或用中文句号断句。全文界面悬停句子即可看到。</div>
+        <textarea class="f" id="fTrans" rows="5"></textarea>
+      </div>
+      <div class="field" id="ipaField">
+        <label>音标</label>
+        <div class="desc">每行一个，格式：word = 音标。不影响句型短语的匹配与切分，悬停单词即可看到。</div>
+        <textarea class="f" id="fIpa" rows="4" placeholder="niche = /niːʃ/"></textarea>
+      </div>
       <div class="field" id="patField">
         <label>句型（每行一个）</label>
         <div class="desc">格式：<code>English text (中文)</code>，用 <code>...</code> 表示可替换的空位。中文可留空。</div>
@@ -764,7 +785,40 @@ function computeItems(answer,kind,textOverride){
   });
 }
 
-function renderFull(text,cuts,fav){
+function segKey(t){return (t||'').replace(/\s+/g,' ').trim();}
+function parseIpa(raw){
+  // one "word = phonetics" per line
+  const m=new Map();
+  (raw||'').split('\n').forEach(line=>{
+    const i=line.indexOf('=');
+    if(i<0)return;
+    const w=line.slice(0,i).trim(), v=line.slice(i+1).trim();
+    if(w&&v)m.set(w.toLowerCase(),v);
+  });
+  return m;
+}
+function wrapIpa(html,ipa){
+  // html here is already-escaped plain text; wrap known words for hover
+  if(!ipa||!ipa.size)return html;
+  return html.replace(/[A-Za-z\u00C0-\u017F][A-Za-z\u00C0-\u017F'\u2019-]*/g,w=>{
+    const v=ipa.get(w.toLowerCase().replace(/[\u2019]/g,"'"));
+    return v?'<span class="ipa" data-ipa="'+escAttr(v)+'">'+w+'</span>':w;
+  });
+}
+function alignTrans(text,transText){
+  // pair translation sentences with source sentences in order
+  const map=new Map();
+  if(!transText||!transText.trim())return map;
+  const sents=sentenceSpans(text).map(s=>segKey(text.slice(s.start,s.end))).filter(Boolean);
+  const parts=transText.split(/\n+|(?<=[。！？!?…])\s*/).map(x=>x.trim()).filter(Boolean);
+  sents.forEach((s,i)=>{if(parts[i])map.set(s,parts[i]);});
+  if(parts.length>sents.length&&sents.length){
+    const last=sents[sents.length-1];
+    map.set(last,(map.get(last)||'')+' '+parts.slice(sents.length).join(' '));
+  }
+  return map;
+}
+function renderFull(text,cuts,fav,ipa,trans){
   const segs=ttsSegments(text,cuts);
   const sents=sentenceSpans(text);
   const paras=[];{
@@ -785,18 +839,20 @@ function renderFull(text,cuts,fav){
       for(const g of mySegs){
         const gs=Math.max(g.start,ps),ge=Math.min(g.end,pe);
         if(ge<=gs)continue;
-        sentHtml+=spacesToHtml(text.slice(gs,ge));
+        let segHtml=wrapIpa(spacesToHtml(text.slice(gs,ge)),ipa);
         const stext=text.slice(g.start,g.end).trim();
-        if(stext.replace(/[^A-Za-z\u00C0-\u017F]/g,'').length>1)
-          sentHtml+='<button class="abtn" data-t="'+escAttr(stext)+'" title="朗读这一段" aria-label="朗读这一段"></button>';
+        const hasWords=stext.replace(/[^A-Za-z\u00C0-\u017F]/g,'').length>1;
+        if(hasWords){
+          segHtml+='<button class="abtn" data-t="'+escAttr(stext)+'" title="朗读这一段" aria-label="朗读这一段"></button>';
+          const k=segKey(stext);
+          const isFav=!!(fav&&fav.set.has(k));
+          segHtml+='<button class="fstar'+(isFav?' on':'')+'" data-k="'+escAttr(k)+'" title="收藏这一段" aria-label="收藏这一段"></button>';
+          if(fav&&fav.only&&!isFav)segHtml='<span class="sent-off">'+segHtml+'</span>';
+        }
+        sentHtml+=segHtml;
       }
-      // same sentence key as the cloze modes, so favorites stay in sync across 全文/句型/短语
-      const sKey=text.slice(sents[s].start,sents[s].end).replace(/\s+/g,' ').trim();
-      const isFav=!!(fav&&fav.set.has(sKey));
-      if(sKey.replace(/[^A-Za-z\u00C0-\u017F]/g,'').length>1)
-        sentHtml+='<button class="fstar'+(isFav?' on':'')+'" data-k="'+escAttr(sKey)+'" title="收藏本句" aria-label="收藏本句"></button>';
-      if(fav&&fav.only&&!isFav)out+='<span class="sent-off">'+sentHtml+'</span>';
-      else out+=sentHtml;
+      const tr=trans&&trans.get(segKey(text.slice(sents[s].start,sents[s].end)));
+      out+=tr?'<span class="sent" data-tr="'+escAttr(tr)+'">'+sentHtml+'</span>':sentHtml;
     }
     html+='<p>'+out+'</p>';
   }
@@ -875,7 +931,7 @@ function segmentAuto(text,A,B,out){
   for(const [a,b] of merged)out.push({start:A+a,end:A+b});
 }
 
-function renderMasked(text,items,cuts,fav){
+function renderMasked(text,items,cuts,fav,ipa){
   // owner map: first-wins
   const owner=new Int16Array(text.length).fill(-1);
   items.forEach((it,idx)=>it.spans.forEach(sp=>{
@@ -897,7 +953,7 @@ function renderMasked(text,items,cuts,fav){
         const it=items[o];
         let num='';
         if(!seen.has(o)){seen.add(o); if(it.num) num='<span class="num">'+it.num+'.</span>';}
-        seg+=num+'<span class="hl" data-zh="'+escAttr(it.zh)+'" data-i="'+o+'">'+escHtml(chunk)+'</span>';
+        seg+=num+'<span class="hl" data-zh="'+escAttr(it.zh)+'" data-i="'+o+'">'+wrapIpa(escHtml(chunk),ipa)+'</span>';
       }else{
         const lead=chunk.match(/^\s*/)[0], trail=chunk.match(/\s*$/)[0];
         const core=chunk.slice(lead.length,chunk.length-trail.length);
@@ -907,7 +963,7 @@ function renderMasked(text,items,cuts,fav){
             seg+=escHtml(core); // punctuation only: keep visible as glue
           }else{
             const w=Math.min(Math.max(core.replace(/\s+/g,' ').length,2),8);
-            seg+='<span class="blank" style="--w:'+w+'ch" data-s="'+sIdx+'"><span class="bt">'+escHtml(core)+'</span></span>';
+            seg+='<span class="blank" style="--w:'+w+'ch" data-s="'+sIdx+'"><span class="bt">'+wrapIpa(escHtml(core),ipa)+'</span></span>';
             st.hasBlank=true;
           }
         }
@@ -932,21 +988,22 @@ function renderMasked(text,items,cuts,fav){
       for(let gi=0;gi<mySegs.length;gi++){
         const gs=Math.max(mySegs[gi].start,ps),ge=Math.min(mySegs[gi].end,pe);
         if(ge<=gs)continue;
-        sentHtml+=emitRange(gs,ge,s,st);
+        let segHtml=emitRange(gs,ge,s,st);
         const isLastSeg=gi===mySegs.length-1;
         if(isLastSeg&&st.hasBlank)
-          sentHtml+='<button class="sbtn" data-s="'+s+'" title="显示/隐藏本句被挖空的内容" aria-label="显示或隐藏本句被挖空的内容"></button>';
+          segHtml+='<button class="sbtn" data-s="'+s+'" title="显示/隐藏本句被挖空的内容" aria-label="显示或隐藏本句被挖空的内容"></button>';
         const stext=text.slice(mySegs[gi].start,mySegs[gi].end).trim();
-        if(stext.replace(/[^A-Za-z\u00C0-\u017F]/g,'').length>1)
-          sentHtml+='<button class="abtn" data-t="'+escAttr(stext)+'" title="朗读这一段" aria-label="朗读这一段"></button>';
+        if(stext.replace(/[^A-Za-z\u00C0-\u017F]/g,'').length>1){
+          segHtml+='<button class="abtn" data-t="'+escAttr(stext)+'" title="朗读这一段" aria-label="朗读这一段"></button>';
+          const k=segKey(stext);
+          const isFav=!!(fav&&fav.set.has(k));
+          segHtml+='<button class="fstar'+(isFav?' on':'')+'" data-k="'+escAttr(k)+'" title="收藏这一段" aria-label="收藏这一段"></button>';
+          // filter: non-favorited segments hide in place, keeping their position
+          if(fav&&fav.only&&!isFav)segHtml='<span class="sent-off">'+segHtml+'</span>';
+        }
+        sentHtml+=segHtml;
       }
-      const sKey=text.slice(sents[s].start,sents[s].end).replace(/\s+/g,' ').trim();
-      const isFav=!!(fav&&fav.set.has(sKey));
-      if(sKey.replace(/[^A-Za-z\u00C0-\u017F]/g,'').length>1)
-        sentHtml+='<button class="fstar'+(isFav?' on':'')+'" data-k="'+escAttr(sKey)+'" title="收藏本句" aria-label="收藏本句"></button>';
-      // filter: non-favorited sentences hide in place, keeping their position
-      if(fav&&fav.only&&!isFav)seg+='<span class="sent-off">'+sentHtml+'</span>';
-      else seg+=sentHtml;
+      seg+=sentHtml;
     }
     html+='<p>'+seg+'</p>';
   }
@@ -1357,14 +1414,16 @@ function renderCardView(a,isDaily){
   const mode=state.mode;
   const parsed=parseCuts(a.fullText||''); // markers hidden from display and matching
   const favInfo={set:new Set(a.sentFavs||[]),only:!!state.favOnlySent};
+  const ipaMap=parseIpa(a.ipaText||'');
+  const transMap=alignTrans(parsed.text,a.transText||'');
   let bodyHtml,footHtml='';
   if(mode==='full'){
-    bodyHtml=renderFull(parsed.text,parsed.cuts,favInfo);
+    bodyHtml=renderFull(parsed.text,parsed.cuts,favInfo,ipaMap,transMap);
   }else{
     const kind=mode==='pattern'?'pattern':'phrase';
     const items=computeItems(a,kind,parsed.text);
     let n=0; items.forEach(it=>{ if(it.spans.length) it.num=++n; });
-    bodyHtml=renderMasked(parsed.text,items,parsed.cuts,favInfo);
+    bodyHtml=renderMasked(parsed.text,items,parsed.cuts,favInfo,ipaMap);
     const unmatched=items.filter(it=>it.spans.length===0);
     if(unmatched.length){
       footHtml='<div class="footnote">这些'+(mode==='pattern'?'句型':'短语')+'没在全文里找到，练习时已跳过（可能是措辞不同或写错）：<br>'+
@@ -1475,6 +1534,8 @@ window.openEditor=function(id){
   document.getElementById('fTitle').value=a?a.title:'';
   document.getElementById('fGroup').value=a?(a.group||''):'';
   document.getElementById('groupList').innerHTML=allGroups().map(g=>'<option value="'+escAttr(g)+'">').join('');
+  document.getElementById('fTrans').value=a?(a.transText||''):'';
+  document.getElementById('fIpa').value=a?(a.ipaText||''):'';
   document.getElementById('fPatterns').value=a?itemsToText(a.patterns):'';
   document.getElementById('fPhrases').value=a?itemsToText(a.phrases):'';
   document.getElementById('fFull').value=a?a.fullText:'';
@@ -1495,6 +1556,8 @@ function openDailyEditor(id){
   document.getElementById('modalTitle').textContent=e?'编辑日常用语':'新建日常用语';
   document.getElementById('fDailyText').value=e?(e.fullText||''):'';
   document.getElementById('fDailyZh').value=e?(e.zh||''):'';
+  document.getElementById('fTrans').value=e?(e.transText||''):'';
+  document.getElementById('fIpa').value=e?(e.ipaText||''):'';
   document.getElementById('fPatterns').value=e?itemsToText(e.patterns||[]):'';
   document.getElementById('fPhrases').value=e?itemsToText(e.phrases||[]):'';
   document.getElementById('pasteBox').value='';
@@ -1525,11 +1588,13 @@ document.getElementById('saveBtn').onclick=()=>{
     const dpat=textToItems(document.getElementById('fPatterns').value);
     const dphr=textToItems(document.getElementById('fPhrases').value);
     if(!ftxt){closeEditor();return;}
+    const dtr=document.getElementById('fTrans').value.trim();
+    const dip=document.getElementById('fIpa').value.trim();
     if(editingDailyId){
       const e=state.daily.find(x=>x.id===editingDailyId);
-      if(e){e.fullText=ftxt;e.zh=dzh;e.patterns=dpat;e.phrases=dphr;}
+      if(e){e.fullText=ftxt;e.zh=dzh;e.patterns=dpat;e.phrases=dphr;e.transText=dtr;e.ipaText=dip;}
     }else{
-      state.daily.push({id:uid(),fullText:ftxt,zh:dzh,patterns:dpat,phrases:dphr,fav:false});
+      state.daily.push({id:uid(),fullText:ftxt,zh:dzh,patterns:dpat,phrases:dphr,transText:dtr,ipaText:dip,fav:false});
       state.selectedId='__daily__';state.dailyOpen=null;
     }
     save();closeEditor();renderAll();
@@ -1539,11 +1604,14 @@ document.getElementById('saveBtn').onclick=()=>{
   const phrases=textToItems(document.getElementById('fPhrases').value);
   const fullText=document.getElementById('fFull').value.replace(/\r\n/g,'\n').trim();
   if(!title&&!fullText){closeEditor();return;}
+  const transText=document.getElementById('fTrans').value.trim();
+  const ipaText=document.getElementById('fIpa').value.trim();
   if(editingId){
     const a=state.answers.find(x=>x.id===editingId);
     a.title=title;a.group=group;a.patterns=patterns;a.phrases=phrases;a.fullText=fullText;
+    a.transText=transText;a.ipaText=ipaText;
   }else{
-    const na={id:uid(),title:title||'（未命名）',group,patterns,phrases,fullText};
+    const na={id:uid(),title:title||'（未命名）',group,patterns,phrases,fullText,transText,ipaText};
     state.answers.push(na);state.selectedId=na.id;
   }
   state.openGroup=group||UNGROUPED; // keep the saved card visible
