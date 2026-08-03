@@ -589,7 +589,7 @@
       </div>
       <div class="field" id="transField">
         <label>翻译</label>
-        <div class="desc">与全文按句子顺序自动对应；一句一行，或用中文句号断句。全文界面悬停句子即可看到。</div>
+        <div class="desc">整段粘贴即可，无需换行。按句末标点（. ! ? 。！？）断句，与全文第 N 句一一对应。全文界面悬停句子即可看到。</div>
         <textarea class="f" id="fTrans" rows="5"></textarea>
       </div>
       <div class="field" id="ipaField">
@@ -806,15 +806,30 @@ function wrapIpa(html,ipa){
   });
 }
 function alignTrans(text,transText){
-  // pair translation sentences with source sentences in order
+  // pair the Nth source sentence with the Nth translation sentence, regardless
+  // of paragraphs or line breaks; sentence ends recognised for both Latin
+  // (. ! ?) and CJK (。！？…) punctuation
   const map=new Map();
   if(!transText||!transText.trim())return map;
   const sents=sentenceSpans(text).map(s=>segKey(text.slice(s.start,s.end))).filter(Boolean);
-  const parts=transText.split(/\n+|(?<=[。！？!?…])\s*/).map(x=>x.trim()).filter(Boolean);
+  const flat=transText.replace(/\s+/g,' ').trim();
+  const parts=[];
+  // CJK punctuation ends a sentence outright (no decimal ambiguity);
+  // Latin punctuation needs following whitespace so "4.5 euros" stays intact
+  const re=/[。！？…]+["'\u201D\u2019)\]】」』]*|[.!?]+["'\u201D\u2019)\]]*(?=\s|$)/g;
+  let last=0,m;
+  while((m=re.exec(flat))){
+    const end=m.index+m[0].length;
+    const piece=flat.slice(last,end).trim();
+    if(piece)parts.push(piece);
+    last=end;
+  }
+  const tail=flat.slice(last).trim();
+  if(tail)parts.push(tail);
   sents.forEach((s,i)=>{if(parts[i])map.set(s,parts[i]);});
   if(parts.length>sents.length&&sents.length){
-    const last=sents[sents.length-1];
-    map.set(last,(map.get(last)||'')+' '+parts.slice(sents.length).join(' '));
+    const lastKey=sents[sents.length-1];
+    map.set(lastKey,(map.get(lastKey)||'')+' '+parts.slice(sents.length).join(' '));
   }
   return map;
 }
