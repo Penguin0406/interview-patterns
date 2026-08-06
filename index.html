@@ -140,7 +140,24 @@
   .qitem.dragging{opacity:.45;}
   .qitem.drop-above{box-shadow:0 -2.5px 0 0 var(--phr-ink);}
   .qitem.drop-below{box-shadow:0 2.5px 0 0 var(--phr-ink);}
-  .ghead.drop-into{background:var(--hover);color:var(--ink);outline:1.5px dashed var(--faint);outline-offset:-2px;}
+  .ghead.drop-into,.fhead.drop-into{background:var(--hover);color:var(--ink);outline:1.5px dashed var(--faint);outline-offset:-2px;}
+  .fhead{display:flex;align-items:center;gap:7px;padding:13px 6px 6px;color:var(--muted);
+         user-select:none;cursor:pointer;border-radius:8px;}
+  .fhead:hover{color:var(--ink);}
+  .fhead .chev{display:inline-block;transition:transform .15s;font-size:calc(13px * var(--fs));line-height:1;}
+  .fhead.closed .chev{transform:rotate(-90deg);}
+  .fhead .fname{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+                font-family:var(--serif);font-size:calc(16.5px * var(--fs));font-weight:600;color:var(--ink);}
+  .fhead.dragging,.ghead.dragging,.qitem.dragging{opacity:.45;}
+  .fhead.drop-above,.ghead.drop-above,.qitem.drop-above{box-shadow:0 -2.5px 0 0 var(--phr-ink);}
+  .fhead.drop-below,.ghead.drop-below,.qitem.drop-below{box-shadow:0 2.5px 0 0 var(--phr-ink);}
+  .ghead.nested{margin-left:16px;}
+  .ghead.nested+.qitem,.ghead.nested~.gempty{margin-left:16px;}
+  .dh{border:none;background:none;color:var(--faint);cursor:grab;font-size:calc(13px * var(--fs));
+      padding:2px 3px;flex:0 0 auto;border-radius:5px;line-height:1;touch-action:none;}
+  .dh:hover{color:var(--ink);}
+  .dh:active{cursor:grabbing;}
+  .gempty{font-size:calc(11.5px * var(--fs));color:var(--muted);padding:6px 10px 10px;}
   .ghead.dragging{opacity:.45;}
   .ghead.drop-above{box-shadow:0 -2.5px 0 0 var(--phr-ink);}
   .ghead.drop-below{box-shadow:0 2.5px 0 0 var(--phr-ink);}
@@ -315,7 +332,7 @@
 
   /* ---------- phrasebook ---------- */
   .pb-item{display:flex;align-items:flex-start;gap:9px;padding:15px 17px;margin-bottom:10px;}
-  .pb-drag{border:none;background:none;color:var(--faint);cursor:grab;font-size:calc(14px * var(--fs));
+  .pb-drag{border:none;background:none;color:var(--faint);cursor:grab;touch-action:none;font-size:calc(14px * var(--fs));
            padding:2px 3px;margin-top:4px;flex:0 0 auto;border-radius:5px;line-height:1;}
   .pb-drag:hover{color:var(--ink);}
   .pb-drag:active{cursor:grabbing;}
@@ -516,7 +533,8 @@
       </div>
     </div>
     <div class="side-tools">
-      <button class="btn primary" id="newBtn">+ 新建</button>
+      <button class="btn primary" id="newGroupBtn">+ 分组</button>
+      <button class="btn ghost" id="newFolderBtn">+ 文件夹</button>
       <button class="btn ghost" id="importBtn">导入</button>
       <button class="btn ghost" id="exportBtn">导出</button>
       <input type="file" id="importFile" accept="application/json" hidden>
@@ -778,7 +796,7 @@ function bestAlignment(text,lits){
    ============================================================ */
 const LS_KEY='interview_practice_v1';
 const DEF_TITLE='流畅表达任何事';
-let state={answers:[],selectedId:null,mode:'full',showZh:false,revealAll:false,openGroup:null,pbShowZh:false,pbFavOnly:false,pbMode:'pattern',daily:[],dailyOpen:null,appTitle:DEF_TITLE,favOnlySent:false,groupOrder:[]};
+let state={answers:[],selectedId:null,mode:'full',showZh:false,revealAll:false,openGroup:null,pbShowZh:false,pbFavOnly:false,pbMode:'pattern',daily:[],dailyOpen:null,appTitle:DEF_TITLE,favOnlySent:false,groupOrder:[],groups:[],folders:[],groupFolder:{},openFolder:null};
 
 function uid(){return 'a'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
 
@@ -848,10 +866,15 @@ function load(){
       if(Array.isArray(d.daily))state.daily=d.daily;
       if('dailyOpen'in d)state.dailyOpen=d.dailyOpen;
       if(typeof d.appTitle==='string'&&d.appTitle.trim())state.appTitle=d.appTitle.trim();
-      if(Array.isArray(d.groupOrder))state.groupOrder=d.groupOrder;}
+      if(Array.isArray(d.groupOrder))state.groupOrder=d.groupOrder;
+      if(Array.isArray(d.groups))state.groups=d.groups;
+      if(Array.isArray(d.folders))state.folders=d.folders;
+      if(d.groupFolder&&typeof d.groupFolder==='object')state.groupFolder=d.groupFolder;
+      if('openFolder'in d)state.openFolder=d.openFolder;}
   }catch(e){}
   if(!state.answers.length&&!state.daily.length)state.answers=seedData();
   migratePhrasebooks();
+  syncGroups();
   if(state.selectedId!=='__daily__'&&(!state.selectedId||!state.answers.find(a=>a.id===state.selectedId)))
     state.selectedId=state.answers[0]?state.answers[0].id:(state.daily.length?'__daily__':null);
   if(state.openGroup===null){
@@ -860,7 +883,7 @@ function load(){
   }
 }
 function save(){
-  try{localStorage.setItem(LS_KEY,JSON.stringify({answers:state.answers,selectedId:state.selectedId,showZh:state.showZh,openGroup:state.openGroup,pbShowZh:state.pbShowZh,pbFavOnly:state.pbFavOnly,pbMode:state.pbMode,daily:state.daily,dailyOpen:state.dailyOpen,appTitle:state.appTitle,groupOrder:state.groupOrder}));}catch(e){}
+  try{localStorage.setItem(LS_KEY,JSON.stringify({answers:state.answers,selectedId:state.selectedId,showZh:state.showZh,openGroup:state.openGroup,pbShowZh:state.pbShowZh,pbFavOnly:state.pbFavOnly,pbMode:state.pbMode,daily:state.daily,dailyOpen:state.dailyOpen,appTitle:state.appTitle,groupOrder:state.groupOrder,groups:state.groups,folders:state.folders,groupFolder:state.groupFolder,openFolder:state.openFolder}));}catch(e){}
 }
 
 /* ============================================================
@@ -1143,41 +1166,52 @@ const qlist=document.getElementById('qlist');
 const UNGROUPED='未分组';
 const FAV='收藏';
 function groupOf(a){return (a.group||'').trim()||UNGROUPED;}
-function allGroups(){
-  const s=[];state.answers.forEach(a=>{const g=groupOf(a);if(g!==UNGROUPED&&g!==FAV&&!s.includes(g))s.push(g);});return s;
+// groups exist on their own (state.groups) so an empty group can be created first
+// and filled later; folders (state.folders) hold groups via state.groupFolder
+function syncGroups(){
+  if(!Array.isArray(state.groups))state.groups=[];
+  if(!Array.isArray(state.folders))state.folders=[];
+  if(!state.groupFolder||typeof state.groupFolder!=='object')state.groupFolder={};
+  if(!state.groups.length&&Array.isArray(state.groupOrder)&&state.groupOrder.length)
+    state.groups=state.groupOrder.slice();
+  state.answers.forEach(a=>{
+    const g=groupOf(a);
+    if(g!==UNGROUPED&&g!==FAV&&state.groups.indexOf(g)<0)state.groups.push(g);
+  });
+  state.groups=state.groups.filter((g,i)=>g&&g!==UNGROUPED&&g!==FAV&&state.groups.indexOf(g)===i);
+  Object.keys(state.groupFolder).forEach(g=>{
+    const f=state.groupFolder[g];
+    if(state.groups.indexOf(g)<0||state.folders.indexOf(f)<0)delete state.groupFolder[g];
+  });
+  state.groupOrder=state.groups.slice(); // kept in sync for older backups
 }
-let dragId=null,dragGroup=null;
-// groupOrder holds the user's drag order; unknown groups append in first-appearance order
-function orderedGroupNames(names){
-  const known=state.groupOrder.filter(g=>names.includes(g));
-  const rest=names.filter(g=>!known.includes(g));
-  return known.concat(rest);
+function allGroups(){return state.groups.slice();}
+function groupsInFolder(f){return state.groups.filter(g=>state.groupFolder[g]===f);}
+function topLevelGroups(){return state.groups.filter(g=>!state.groupFolder[g]);}
+function cardsOf(g){return state.answers.filter(a=>groupOf(a)===g);}
+function uniqueName(base,list){
+  let n=base,i=2;
+  while(list.indexOf(n)>=0)n=base+' '+(i++);
+  return n;
 }
-function moveGroup(src,target,after){
-  if(!src||src===target||src===UNGROUPED||target===UNGROUPED)return;
-  const all=[];
-  state.answers.forEach(a=>{const g=groupOf(a);if(g!==UNGROUPED&&!all.includes(g))all.push(g);});
-  let order=orderedGroupNames(all);
-  order=order.filter(g=>g!==src);
-  const ti=order.indexOf(target);
-  if(ti<0)order.push(src);else order.splice(after?ti+1:ti,0,src);
-  state.groupOrder=order;
-  save();renderSidebar();
+function closeDrawer(){
+  document.querySelector('.side').classList.remove('open');
+  const lt=document.getElementById('listToggle');if(lt)lt.setAttribute('aria-expanded','false');
 }
-function clearDropMarks(){
-  qlist.querySelectorAll('.drop-above,.drop-below,.drop-into').forEach(n=>n.classList.remove('drop-above','drop-below','drop-into'));
-}
+
+/* ---- structural moves ---- */
 function moveCard(srcId,targetId,after){
   if(!srcId||srcId===targetId)return;
   const si=state.answers.findIndex(x=>x.id===srcId);if(si<0)return;
   const [card]=state.answers.splice(si,1);
   const ti=state.answers.findIndex(x=>x.id===targetId);
-  if(ti<0){state.answers.push(card);}
+  if(ti<0)state.answers.push(card);
   else{
-    card.group=(state.answers[ti].group||'').trim(); // dropping between cards adopts that group
+    card.group=(state.answers[ti].group||'').trim(); // adopt the target's group
     state.answers.splice(after?ti+1:ti,0,card);
   }
   state.openGroup=groupOf(card);
+  ensureFolderOpen(state.openGroup);
   save();renderAll();
 }
 function moveToGroup(srcId,gname){
@@ -1187,14 +1221,175 @@ function moveToGroup(srcId,gname){
   card.group=(gname===UNGROUPED?'':gname);
   let last=-1;
   state.answers.forEach((x,i)=>{if(groupOf(x)===groupOf(card))last=i;});
-  state.answers.splice(last+1,0,card); // land at the end of the target group
+  state.answers.splice(last+1,0,card);
   state.openGroup=groupOf(card);
+  ensureFolderOpen(state.openGroup);
   save();renderAll();
 }
-function closeDrawer(){
-  document.querySelector('.side').classList.remove('open');
-  const lt=document.getElementById('listToggle');if(lt)lt.setAttribute('aria-expanded','false');
+function moveGroup(src,target,after){
+  if(!src||src===target)return;
+  const i=state.groups.indexOf(src);if(i<0)return;
+  state.groups.splice(i,1);
+  const ti=state.groups.indexOf(target);
+  if(ti<0)state.groups.push(src);
+  else{
+    state.groups.splice(after?ti+1:ti,0,src);
+    const tf=state.groupFolder[target];           // land in the target's folder
+    if(tf)state.groupFolder[src]=tf;else delete state.groupFolder[src];
+  }
+  syncGroups();save();renderSidebar();
 }
+function moveGroupToFolder(g,f){
+  if(!g||state.groups.indexOf(g)<0)return;
+  if(f)state.groupFolder[g]=f;else delete state.groupFolder[g];
+  // place it at the end of that folder's block
+  const i=state.groups.indexOf(g);state.groups.splice(i,1);
+  const peers=f?groupsInFolder(f):topLevelGroups();
+  if(peers.length){
+    const lastIdx=state.groups.indexOf(peers[peers.length-1]);
+    state.groups.splice(lastIdx+1,0,g);
+  }else state.groups.push(g);
+  state.openFolder=f||null;
+  syncGroups();save();renderSidebar();
+}
+function moveFolder(src,target,after){
+  if(!src||src===target)return;
+  const i=state.folders.indexOf(src);if(i<0)return;
+  state.folders.splice(i,1);
+  const ti=state.folders.indexOf(target);
+  if(ti<0)state.folders.push(src);else state.folders.splice(after?ti+1:ti,0,src);
+  save();renderSidebar();
+}
+function ensureFolderOpen(g){
+  const f=state.groupFolder[g];
+  if(f)state.openFolder=f;
+}
+
+/* ---- create / rename / remove ---- */
+function newFolder(){
+  const n=prompt('新建文件夹，输入名称：','新文件夹');
+  if(n===null)return;
+  const name=uniqueName(n.trim()||'新文件夹',state.folders);
+  state.folders.push(name);state.openFolder=name;
+  save();renderSidebar();
+}
+function newGroup(folder){
+  const n=prompt(folder?('在文件夹「'+folder+'」中新建分组，输入名称：'):'新建分组，输入名称：','新分组');
+  if(n===null)return;
+  const name=uniqueName(n.trim()||'新分组',state.groups.concat([UNGROUPED,FAV]));
+  state.groups.push(name);
+  if(folder)state.groupFolder[name]=folder;
+  state.openGroup=name;state.openFolder=folder||null;
+  save();renderSidebar();
+}
+function renameGroup(gname){
+  const nn=prompt('重命名分组「'+gname+'」\n（清空后确定 = 删除分组，卡片移入「'+UNGROUPED+'」）',gname);
+  if(nn===null)return;
+  const newName=nn.trim();
+  if(newName&&newName!==gname&&state.groups.indexOf(newName)>=0){alert('已有同名分组。');return;}
+  state.answers.forEach(a=>{if(groupOf(a)===gname)a.group=newName;});
+  const i=state.groups.indexOf(gname);
+  if(i>=0){
+    if(newName){
+      state.groups[i]=newName;
+      if(state.groupFolder[gname]){state.groupFolder[newName]=state.groupFolder[gname];}
+    }else state.groups.splice(i,1);
+    delete state.groupFolder[gname];
+  }
+  if(state.openGroup===gname)state.openGroup=newName||null;
+  syncGroups();save();renderAll();
+}
+function renameFolder(fname){
+  const nn=prompt('重命名文件夹「'+fname+'」\n（清空后确定 = 删除文件夹，里面的分组移到外层）',fname);
+  if(nn===null)return;
+  const newName=nn.trim();
+  if(newName&&newName!==fname&&state.folders.indexOf(newName)>=0){alert('已有同名文件夹。');return;}
+  const i=state.folders.indexOf(fname);
+  Object.keys(state.groupFolder).forEach(g=>{
+    if(state.groupFolder[g]===fname){
+      if(newName)state.groupFolder[g]=newName;else delete state.groupFolder[g];
+    }
+  });
+  if(i>=0){if(newName)state.folders[i]=newName;else state.folders.splice(i,1);}
+  if(state.openFolder===fname)state.openFolder=newName||null;
+  save();renderSidebar();
+}
+
+/* ---- pointer-based drag: one implementation for mouse and touch ---- */
+let drag=null;
+function clearDropMarks(){
+  qlist.querySelectorAll('.drop-above,.drop-below,.drop-into')
+       .forEach(n=>n.classList.remove('drop-above','drop-below','drop-into'));
+}
+function dropTargetAt(x,y){
+  const el=document.elementFromPoint(x,y);
+  if(!el)return null;
+  return el.closest('[data-drop]');
+}
+function attachDrag(handle,type,key){
+  handle.addEventListener('pointerdown',ev=>{
+    if(ev.button!==undefined&&ev.button!==0)return;
+    ev.preventDefault();ev.stopPropagation();
+    const startY=ev.clientY;
+    let moved=false;
+    const row=handle.closest('[data-drop]');
+    const onMove=e=>{
+      if(!moved&&Math.abs(e.clientY-startY)<5)return;
+      if(!moved){moved=true;drag={type,key};row&&row.classList.add('dragging');}
+      e.preventDefault();
+      clearDropMarks();
+      const t=dropTargetAt(e.clientX,e.clientY);
+      if(t&&t!==row){
+        const ok=canDrop(type,t);
+        if(ok==='into')t.classList.add('drop-into');
+        else if(ok==='order'){
+          const r=t.getBoundingClientRect();
+          t.classList.add((e.clientY-r.top)>r.height/2?'drop-below':'drop-above');
+        }
+      }
+      // auto-scroll near the edges of the list
+      const lr=qlist.getBoundingClientRect();
+      if(e.clientY<lr.top+28)qlist.scrollTop-=12;
+      else if(e.clientY>lr.bottom-28)qlist.scrollTop+=12;
+    };
+    const onUp=e=>{
+      document.removeEventListener('pointermove',onMove,true);
+      document.removeEventListener('pointerup',onUp,true);
+      document.removeEventListener('pointercancel',onUp,true);
+      row&&row.classList.remove('dragging');
+      if(moved){
+        const t=dropTargetAt(e.clientX,e.clientY);
+        const below=t&&t.classList.contains('drop-below');
+        clearDropMarks();
+        if(t&&t!==row)performDrop(type,key,t,below);
+      }
+      clearDropMarks();drag=null;
+    };
+    document.addEventListener('pointermove',onMove,{capture:true,passive:false});
+    document.addEventListener('pointerup',onUp,true);
+    document.addEventListener('pointercancel',onUp,true);
+  });
+}
+function canDrop(type,t){
+  const k=t.dataset.drop;
+  if(type==='card')return k==='card'?'order':(k==='group'?'into':null);
+  if(type==='group')return k==='group'?(t.dataset.g===UNGROUPED?null:'order'):(k==='folder'?'into':null);
+  if(type==='folder')return k==='folder'?'order':null;
+  return null;
+}
+function performDrop(type,key,t,below){
+  const k=t.dataset.drop;
+  if(type==='card'){
+    if(k==='card')moveCard(key,t.dataset.id,below);
+    else if(k==='group')moveToGroup(key,t.dataset.g);
+  }else if(type==='group'){
+    if(k==='group'&&t.dataset.g!==UNGROUPED)moveGroup(key,t.dataset.g,below);
+    else if(k==='folder')moveGroupToFolder(key,t.dataset.f);
+  }else if(type==='folder'){
+    if(k==='folder')moveFolder(key,t.dataset.f,below);
+  }
+}
+
 // One answer object can be rendered in two places (its own group and 收藏).
 // Both nodes point at the same object, so edits and counts are shared by construction.
 function buildCard(a,inFav){
@@ -1202,8 +1397,10 @@ function buildCard(a,inFav){
   const el=document.createElement('div');
   el.className='qitem'+(a.id===state.selectedId?' active':'');
   el.dataset.id=a.id;
+  if(!inFav){el.dataset.drop='card';}
   el.tabIndex=0;
   el.innerHTML='<div class="qitem-top">'+
+      (inFav?'':'<button class="dh" title="拖动排序" aria-label="拖动排序">⠿</button>')+
       '<div class="qitem-title">'+escHtml(a.title||'（未命名）')+'</div>'+
       '<button class="star'+(a.fav?' on':'')+'" aria-label="收藏或取消收藏"></button>'+
     '</div>'+
@@ -1230,35 +1427,17 @@ function buildCard(a,inFav){
   el.onclick=()=>{state.selectedId=a.id;save();renderAll();closeDrawer();};
   el.onkeydown=e=>{if((e.key==='Enter'||e.key===' ')&&e.target===el){e.preventDefault();el.click();}};
   if(!inFav){
-    el.draggable=true;
-    el.addEventListener('dragstart',e=>{
-      dragId=a.id;el.classList.add('dragging');
-      e.dataTransfer.effectAllowed='move';
-      try{e.dataTransfer.setData('text/plain',a.id);}catch(_){}
-    });
-    el.addEventListener('dragend',()=>{dragId=null;el.classList.remove('dragging');clearDropMarks();});
-    el.addEventListener('dragover',e=>{
-      if(!dragId||dragId===a.id)return;
-      e.preventDefault();e.dataTransfer.dropEffect='move';
-      const r=el.getBoundingClientRect();
-      const below=(e.clientY-r.top)>r.height/2;
-      el.classList.toggle('drop-below',below);
-      el.classList.toggle('drop-above',!below);
-    });
-    el.addEventListener('dragleave',()=>{el.classList.remove('drop-above','drop-below');});
-    el.addEventListener('drop',e=>{
-      e.preventDefault();
-      const below=el.classList.contains('drop-below');
-      clearDropMarks();
-      moveCard(dragId,a.id,below);
-    });
+    const dh=el.querySelector('.dh');
+    if(dh)attachDrag(dh,'card',a.id);
   }
   return el;
 }
 function renderSidebar(){
+  syncGroups();
   const scroll=qlist.scrollTop;
   qlist.innerHTML='';
-  // fixed 日常用语 zone pinned above all groups
+
+  // fixed 日常用语 zone pinned above everything
   const dq=document.createElement('div');
   dq.className='qitem daily-zone'+(state.selectedId==='__daily__'?' active':'');
   dq.tabIndex=0;
@@ -1268,77 +1447,94 @@ function renderSidebar(){
   dq.onclick=()=>{state.selectedId='__daily__';state.dailyOpen=null;save();renderAll();closeDrawer();};
   dq.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();dq.click();}};
   qlist.appendChild(dq);
-  const groups=new Map();
-  state.answers.forEach(a=>{const g=groupOf(a);if(!groups.has(g))groups.set(g,[]);groups.get(g).push(a);});
-  const names=orderedGroupNames([...groups.keys()].filter(g=>g!==UNGROUPED));
-  if(groups.has(UNGROUPED))names.push(UNGROUPED); // 未分组 always last
+
+  // ★ favourites: a virtual view, never a drop target
   const favs=state.answers.filter(a=>a.fav);
-  const sections=[];
-  if(favs.length)sections.push({name:FAV,list:favs,virtual:true});
-  names.forEach(n=>sections.push({name:n,list:groups.get(n),virtual:false}));
-  const headerless=(sections.length===1&&sections[0].name===UNGROUPED);
-  for(const sec of sections){
-    const gname=sec.name,list=sec.list;
-    const isOpen=headerless||state.openGroup===gname;
-    if(!headerless){
-      const gh=document.createElement('div');
-      gh.className='ghead'+(isOpen?'':' closed');
-      gh.tabIndex=0;
-      const gTotal=list.reduce((n,x)=>n+(x.reviews||0),0);
-      gh.innerHTML='<span class="chev">⌄</span><span class="gname">'+(sec.virtual?'★ ':'')+escHtml(gname)+'</span>'+
-        '<span class="gsum" title="组内卡片复习次数总和">Σ '+gTotal+'</span>'+
-        '<span class="gcount">'+list.length+'</span>'+
-        (sec.virtual||gname===UNGROUPED?'':'<button class="gbtn" title="重命名或解散分组">✎</button>');
-      // accordion: opening one group closes whatever else was open
-      const toggle=()=>{state.openGroup=isOpen?null:gname;save();renderSidebar();};
-      gh.onclick=toggle;
-      gh.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();toggle();}};
-      const btn=gh.querySelector('.gbtn');
-      if(btn)btn.onclick=e=>{e.stopPropagation();
-        const nn=prompt('重命名分组「'+gname+'」\n（清空后确定 = 解散分组，卡片移入「'+UNGROUPED+'」）',gname);
-        if(nn===null)return;
-        const newName=nn.trim();
-        state.answers.forEach(a=>{if(groupOf(a)===gname)a.group=newName;});
-        const oi=state.groupOrder.indexOf(gname);
-        if(oi>=0){if(newName)state.groupOrder[oi]=newName;else state.groupOrder.splice(oi,1);}
-        if(state.openGroup===gname)state.openGroup=newName||null;
-        save();renderAll();
-      };
-      if(!sec.virtual){
-        if(gname!==UNGROUPED){
-          gh.draggable=true;
-          gh.addEventListener('dragstart',e=>{
-            dragGroup=gname;gh.classList.add('dragging');
-            e.dataTransfer.effectAllowed='move';
-            try{e.dataTransfer.setData('text/plain','group:'+gname);}catch(_){}
-          });
-          gh.addEventListener('dragend',()=>{dragGroup=null;gh.classList.remove('dragging');clearDropMarks();});
-        }
-        gh.addEventListener('dragover',e=>{
-          if(dragGroup&&dragGroup!==gname&&gname!==UNGROUPED){
-            e.preventDefault();e.dataTransfer.dropEffect='move';
-            const r=gh.getBoundingClientRect();
-            const below=(e.clientY-r.top)>r.height/2;
-            gh.classList.toggle('drop-below',below);
-            gh.classList.toggle('drop-above',!below);
-            return;
-          }
-          if(dragId){e.preventDefault();e.dataTransfer.dropEffect='move';gh.classList.add('drop-into');}
-        });
-        gh.addEventListener('dragleave',()=>gh.classList.remove('drop-into','drop-above','drop-below'));
-        gh.addEventListener('drop',e=>{
-          e.preventDefault();
-          const below=gh.classList.contains('drop-below');
-          clearDropMarks();
-          if(dragGroup)moveGroup(dragGroup,gname,below);
-          else moveToGroup(dragId,gname);
-        });
-      }
-      qlist.appendChild(gh);
-    }
-    if(!isOpen)continue;
-    list.forEach(a=>qlist.appendChild(buildCard(a,sec.virtual)));
+  if(favs.length){
+    const open=state.openGroup===FAV;
+    const gh=document.createElement('div');
+    gh.className='ghead'+(open?'':' closed');
+    gh.tabIndex=0;
+    gh.innerHTML='<span class="chev">⌄</span><span class="gname">★ '+escHtml(FAV)+'</span>'
+      +'<span class="gsum">Σ '+favs.reduce((n,x)=>n+(x.reviews||0),0)+'</span>'
+      +'<span class="gcount">'+favs.length+'</span>';
+    gh.onclick=()=>{state.openGroup=open?null:FAV;save();renderSidebar();};
+    qlist.appendChild(gh);
+    if(open)favs.forEach(a=>qlist.appendChild(buildCard(a,true)));
   }
+
+  const renderGroup=(gname,inFolder)=>{
+    const list=cardsOf(gname);
+    const open=state.openGroup===gname;
+    const gh=document.createElement('div');
+    gh.className='ghead'+(open?'':' closed')+(inFolder?' nested':'');
+    gh.tabIndex=0;
+    gh.dataset.drop='group';gh.dataset.g=gname;
+    const isReal=gname!==UNGROUPED;
+    gh.innerHTML=(isReal?'<button class="dh" title="拖动排序" aria-label="拖动排序">⠿</button>':'')
+      +'<span class="chev">⌄</span><span class="gname">'+escHtml(gname)+'</span>'
+      +'<span class="gsum" title="组内卡片复习次数总和">Σ '+list.reduce((n,x)=>n+(x.reviews||0),0)+'</span>'
+      +'<span class="gcount">'+list.length+'</span>'
+      +'<button class="gbtn addc" title="在这个分组里新建卡片">＋</button>'
+      +(isReal?'<button class="gbtn" title="重命名或删除分组">✎</button>':'');
+    gh.onclick=e=>{
+      if(e.target.closest('.dh')||e.target.closest('.gbtn'))return;
+      state.openGroup=open?null:gname;save();renderSidebar();
+    };
+    gh.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();gh.click();}};
+    gh.querySelector('.addc').onclick=ev=>{ev.stopPropagation();openEditor(null,gname);};
+    const ed=gh.querySelectorAll('.gbtn')[1];
+    if(ed)ed.onclick=ev=>{ev.stopPropagation();renameGroup(gname);};
+    const dh=gh.querySelector('.dh');
+    if(dh)attachDrag(dh,'group',gname);
+    qlist.appendChild(gh);
+    if(open){
+      if(!list.length){
+        const em=document.createElement('div');
+        em.className='gempty';em.textContent='这个分组还没有卡片，点 ＋ 新建';
+        qlist.appendChild(em);
+      }
+      list.forEach(a=>qlist.appendChild(buildCard(a,false)));
+    }
+  };
+
+  // folders, each holding its groups
+  state.folders.forEach(fname=>{
+    const inner=groupsInFolder(fname);
+    const open=state.openFolder===fname;
+    const fh=document.createElement('div');
+    fh.className='fhead'+(open?'':' closed');
+    fh.tabIndex=0;
+    fh.dataset.drop='folder';fh.dataset.f=fname;
+    const cards=inner.reduce((n,g)=>n+cardsOf(g).length,0);
+    fh.innerHTML='<button class="dh" title="拖动排序" aria-label="拖动排序">⠿</button>'
+      +'<span class="chev">⌄</span><span class="fname">'+escHtml(fname)+'</span>'
+      +'<span class="gcount">'+inner.length+' 组 / '+cards+' 卡</span>'
+      +'<button class="gbtn addg" title="在这个文件夹里新建分组">＋</button>'
+      +'<button class="gbtn fedit" title="重命名或删除文件夹">✎</button>';
+    fh.onclick=e=>{
+      if(e.target.closest('.dh')||e.target.closest('.gbtn'))return;
+      state.openFolder=open?null:fname;save();renderSidebar();
+    };
+    fh.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();fh.click();}};
+    fh.querySelector('.addg').onclick=ev=>{ev.stopPropagation();newGroup(fname);};
+    fh.querySelector('.fedit').onclick=ev=>{ev.stopPropagation();renameFolder(fname);};
+    attachDrag(fh.querySelector('.dh'),'folder',fname);
+    qlist.appendChild(fh);
+    if(open){
+      if(!inner.length){
+        const em=document.createElement('div');
+        em.className='gempty';em.textContent='这个文件夹还没有分组，点 ＋ 新建，或把分组拖进来';
+        qlist.appendChild(em);
+      }
+      inner.forEach(g=>renderGroup(g,true));
+    }
+  });
+
+  // groups outside any folder, then 未分组 last
+  topLevelGroups().forEach(g=>renderGroup(g,false));
+  if(state.answers.some(a=>groupOf(a)===UNGROUPED))renderGroup(UNGROUPED,false);
+
   qlist.scrollTop=scroll;
 }
 
@@ -1402,7 +1598,6 @@ function renderDailyRowHtml(e){
   if(cursor<text.length)html+=emit(cursor,text.length);
   return html;
 }
-let dragDailyId=null;
 function moveDaily(srcId,targetId,after){
   if(!srcId||srcId===targetId)return;
   const si=state.daily.findIndex(x=>x.id===srcId);if(si<0)return;
@@ -1500,31 +1695,41 @@ function renderDailyBoard(){
       if(zhEl)zhEl.hidden=!zhEl.hidden;
     }
   });
-  // drag to reorder: only via the ⠿ handle so text stays selectable
+  // drag to reorder: pointer-based so it works with touch as well as mouse
   listEl.querySelectorAll('.pb-item').forEach(el=>{
     const handle=el.querySelector('.pb-drag');
-    handle.addEventListener('mousedown',()=>{el.draggable=true;});
-    el.addEventListener('mouseup',()=>{el.draggable=false;});
-    el.addEventListener('dragstart',ev=>{
-      dragDailyId=el.dataset.id;el.classList.add('dragging');
-      ev.dataTransfer.effectAllowed='move';
-      try{ev.dataTransfer.setData('text/plain',el.dataset.id);}catch(_){}
-    });
-    el.addEventListener('dragend',()=>{dragDailyId=null;el.draggable=false;el.classList.remove('dragging');clearMarks();});
-    el.addEventListener('dragover',ev=>{
-      if(!dragDailyId||dragDailyId===el.dataset.id)return;
-      ev.preventDefault();ev.dataTransfer.dropEffect='move';
-      const r=el.getBoundingClientRect();
-      const below=(ev.clientY-r.top)>r.height/2;
-      el.classList.toggle('drop-below',below);
-      el.classList.toggle('drop-above',!below);
-    });
-    el.addEventListener('dragleave',()=>el.classList.remove('drop-above','drop-below'));
-    el.addEventListener('drop',ev=>{
-      ev.preventDefault();
-      const below=el.classList.contains('drop-below');
-      clearMarks();
-      moveDaily(dragDailyId,el.dataset.id,below);
+    if(!handle)return;
+    handle.addEventListener('pointerdown',ev=>{
+      if(ev.button!==undefined&&ev.button!==0)return;
+      ev.preventDefault();ev.stopPropagation();
+      const startY=ev.clientY;let moved=false;
+      const rowAt=(x,y)=>{const t=document.elementFromPoint(x,y);return t?t.closest('.pb-item'):null;};
+      const onMove=e=>{
+        if(!moved&&Math.abs(e.clientY-startY)<5)return;
+        if(!moved){moved=true;el.classList.add('dragging');}
+        e.preventDefault();clearMarks();
+        const t=rowAt(e.clientX,e.clientY);
+        if(t&&t!==el){
+          const r=t.getBoundingClientRect();
+          t.classList.add((e.clientY-r.top)>r.height/2?'drop-below':'drop-above');
+        }
+      };
+      const onUp=e=>{
+        document.removeEventListener('pointermove',onMove,true);
+        document.removeEventListener('pointerup',onUp,true);
+        document.removeEventListener('pointercancel',onUp,true);
+        el.classList.remove('dragging');
+        if(moved){
+          const t=rowAt(e.clientX,e.clientY);
+          const below=t&&t.classList.contains('drop-below');
+          clearMarks();
+          if(t&&t!==el)moveDaily(el.dataset.id,t.dataset.id,below);
+        }
+        clearMarks();
+      };
+      document.addEventListener('pointermove',onMove,{capture:true,passive:false});
+      document.addEventListener('pointerup',onUp,true);
+      document.addEventListener('pointercancel',onUp,true);
     });
   });
   if(typeof markCached==='function')markCached();
@@ -1543,7 +1748,7 @@ function renderMain(){
   if(!a){
     mainInner.innerHTML='<div class="empty"><h2>还没有内容</h2>'+
       '<p>新建一条回答，把你写好的句型、短语和全文放进来，就能开始三种模式的挖空练习了。</p>'+
-      '<button class="btn primary" onclick="openEditor(null)">+ 新建第一条</button></div>';
+      '<button class="btn primary" onclick="newGroup(null)">+ 新建第一个分组</button></div>';
     return;
   }
   renderCardView(a,false);
@@ -1666,12 +1871,14 @@ function textToItems(txt){
   return txt.split('\n').map(l=>l.trim()).filter(Boolean).map(parseItemLine);
 }
 
-window.openEditor=function(id){
+window.openEditor=function(id,presetGroup){
   editingId=id;
   const a=id?state.answers.find(x=>x.id===id):null;
   document.getElementById('modalTitle').textContent=a?'编辑回答':'新建';
   document.getElementById('fTitle').value=a?a.title:'';
-  document.getElementById('fGroup').value=a?(a.group||''):'';
+  document.getElementById('fGroup').value=a?(a.group||''):(presetGroup&&presetGroup!==UNGROUPED?presetGroup:'');
+  // created from a group header: the group is already decided
+  document.getElementById('groupField').style.display=(!a&&presetGroup)?'none':'';
   document.getElementById('groupList').innerHTML=allGroups().map(g=>'<option value="'+escAttr(g)+'">').join('');
   document.getElementById('fTrans').value=a?(a.transText||''):'';
   document.getElementById('fIpa').value=a?(a.ipaText||''):'';
@@ -1701,6 +1908,7 @@ function openDailyEditor(id){
   document.getElementById('fPhrases').value=e?itemsToText(e.phrases||[]):'';
   document.getElementById('pasteBox').value='';
   document.getElementById('typeField').style.display='none';
+  document.getElementById('groupField').style.display='';
   document.getElementById('deleteBtn').style.display=e?'inline-block':'none';
   updateTypeUI();
   overlay.classList.add('show');
@@ -1753,7 +1961,9 @@ document.getElementById('saveBtn').onclick=()=>{
     const na={id:uid(),title:title||'（未命名）',group,patterns,phrases,fullText,transText,ipaText};
     state.answers.push(na);state.selectedId=na.id;
   }
+  if(group&&state.groups.indexOf(group)<0)state.groups.push(group);
   state.openGroup=group||UNGROUPED; // keep the saved card visible
+  ensureFolderOpen(state.openGroup);
   save();closeEditor();renderAll();
 };
 document.getElementById('deleteBtn').onclick=()=>{
@@ -1840,7 +2050,19 @@ document.getElementById('pasteBox').addEventListener('paste',()=>setTimeout(runP
 /* ============================================================
    Import / export
    ============================================================ */
-document.getElementById('newBtn').onclick=()=>openEditor(null);
+document.getElementById('newGroupBtn').onclick=()=>newGroup(state.openFolder||null);
+document.getElementById('newFolderBtn').onclick=()=>newFolder();
+// put local items into the imported sequence; items absent from the import keep
+// their relative order and follow at the end
+function applyImportedOrder(list,importedList,keyOf){
+  if(!Array.isArray(importedList)||!importedList.length)return list;
+  const rank=new Map();
+  importedList.forEach((x,i)=>{const k=keyOf(x);if(k&&!rank.has(k))rank.set(k,i);});
+  const matched=[],rest=[];
+  list.forEach(x=>{(rank.has(keyOf(x))?matched:rest).push(x);});
+  matched.sort((a,b)=>rank.get(keyOf(a))-rank.get(keyOf(b)));
+  return matched.concat(rest);
+}
 function blobToB64(blob){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(String(r.result).split(',')[1]||'');r.onerror=()=>rej(r.error);r.readAsDataURL(blob);});}
 function b64ToBlob(b64){const bin=atob(b64);const u=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);return new Blob([u],{type:'audio/mpeg'});}
 document.getElementById('exportBtn').onclick=async()=>{
@@ -1852,7 +2074,12 @@ document.getElementById('exportBtn').onclick=async()=>{
       if(vals[i]&&vals[i].size)audio.push({k:keys[i],d:await blobToB64(vals[i])});
     }
   }catch(e){}
-  const blob=new Blob([JSON.stringify({answers:state.answers,daily:state.daily,audio})],{type:'application/json'});
+  // answers/daily array order IS the card order; groupOrder and study time ride along
+  const study=(typeof swData==='object'&&swData&&swData.days)?swData.days:{};
+  const blob=new Blob([JSON.stringify({
+    answers:state.answers,daily:state.daily,
+    groupOrder:state.groupOrder,groups:state.groups,folders:state.folders,groupFolder:state.groupFolder,study,audio
+  })],{type:'application/json'});
   const url=URL.createObjectURL(blob);const a=document.createElement('a');
   const d=new Date();const stamp=d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0');
   a.href=url;a.download=(state.appTitle||DEF_TITLE)+'-备份-'+stamp+'.json';a.click();URL.revokeObjectURL(url);
@@ -1866,6 +2093,7 @@ document.getElementById('importFile').onchange=e=>{
       const d=JSON.parse(rd.result);
       const imported=(d.answers||d||[]).filter(x=>x&&(x.fullText!==undefined||Array.isArray(x.items)));
       if(!imported.length){alert('这个文件里没有找到可导入的回答。');return;}
+      let importSummary='';
       const append=confirm('导入 '+imported.length+' 条。选「确定」合并到现有内容（同名内容会被导入的版本覆盖），选「取消」则替换全部。');
       if(append){
         let added=0,updated=0;
@@ -1880,7 +2108,7 @@ document.getElementById('importFile').onchange=e=>{
             x.id=uid();state.answers.push(x);added++;
           }
         });
-        alert('导入完成：覆盖 '+updated+' 张同名卡片，新增 '+added+' 张。');
+        importSummary='覆盖 '+updated+' 张同名卡片，新增 '+added+' 张';
       }else{
         state.answers=imported.map(x=>({...x,id:uid()}));
         state.daily=[];
@@ -1895,6 +2123,35 @@ document.getElementById('importFile').onchange=e=>{
         });
       }
       migratePhrasebooks();
+      // card / daily order follows the imported file
+      state.answers=applyImportedOrder(state.answers,d.answers,x=>(x&&x.title||'').trim());
+      state.daily=applyImportedOrder(state.daily,d.daily,x=>(x&&x.fullText||'').trim());
+      // group order: imported sequence first, groups only present locally after it
+      if(Array.isArray(d.groups)){
+        const localOnly=(state.groups||[]).filter(g=>d.groups.indexOf(g)<0);
+        state.groups=append?d.groups.concat(localOnly):d.groups.slice();
+      }
+      if(Array.isArray(d.folders)){
+        const localOnlyF=(state.folders||[]).filter(f=>d.folders.indexOf(f)<0);
+        state.folders=append?d.folders.concat(localOnlyF):d.folders.slice();
+      }else if(!append){state.folders=[];}
+      if(d.groupFolder&&typeof d.groupFolder==='object'){
+        state.groupFolder=append?Object.assign({},state.groupFolder,d.groupFolder):Object.assign({},d.groupFolder);
+      }else if(!append){state.groupFolder={};}
+      if(Array.isArray(d.groupOrder)){
+        const localOnly=(state.groupOrder||[]).filter(g=>d.groupOrder.indexOf(g)<0);
+        state.groupOrder=append?d.groupOrder.concat(localOnly):d.groupOrder.slice();
+      }else if(!append){state.groupOrder=[];}
+      // study time: same-date totals are overwritten, other dates kept
+      let days=0;
+      if(d.study&&typeof d.study==='object'){
+        if(!append)swData.days={};
+        Object.keys(d.study).forEach(k=>{
+          const v=Number(d.study[k]);
+          if(isFinite(v)&&v>=0){swData.days[k]=v;days++;}
+        });
+        swSave();if(typeof swRender==='function')swRender();
+      }
       state.selectedId=state.answers[0]?state.answers[0].id:(state.daily.length?'__daily__':null);
       // restore bundled audio into the local cache
       if(Array.isArray(d.audio)&&d.audio.length){
@@ -1905,6 +2162,9 @@ document.getElementById('importFile').onchange=e=>{
         if(n)console.log('restored',n,'audio clips');
       }
       save();renderAll();
+      alert('导入完成：'+(importSummary||'已替换全部内容')
+        +'；顺序已按备份恢复'
+        +(days?('；学习时长恢复 '+days+' 天'):'')+'。');
     }catch(err){alert('读取失败：文件不是有效的 JSON。');}
   };
   rd.readAsText(file);
