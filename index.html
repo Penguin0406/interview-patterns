@@ -721,9 +721,31 @@ function findAll(text,query){
 }
 function matchPattern(text,pat){
   const lits=normApos(pat).split(/\s*(?:\.\.\.|…)\s*/).map(s=>s.trim()).filter(Boolean);
-  const spans=[];let cursor=0;
-  for(const lit of lits){const sp=findAfter(text,lit,cursor);if(sp){spans.push(sp);cursor=sp.end;}}
-  return {spans,matched:spans.length>0};
+  return bestAlignment(text,lits);
+}
+// Try every occurrence of the first literal as an anchor and keep the best
+// alignment (most literals matched, then most compact). A greedy first-hit
+// anchor misfires when an earlier sentence repeats the opening words.
+function bestAlignment(text,lits){
+  if(!lits.length)return {spans:[],matched:false};
+  const starts=findAll(text,lits[0]);
+  if(!starts.length){
+    const spans=[];let cursor=0;
+    for(let i=1;i<lits.length;i++){const sp=findAfter(text,lits[i],cursor);if(sp){spans.push(sp);cursor=sp.end;}}
+    return {spans,matched:spans.length>0};
+  }
+  let best=null;
+  for(const st of starts){
+    const spans=[st];let cursor=st.end;
+    for(let i=1;i<lits.length;i++){
+      const sp=findAfter(text,lits[i],cursor);
+      if(sp){spans.push(sp);cursor=sp.end;}
+    }
+    const width=spans[spans.length-1].end-spans[0].start;
+    if(!best||spans.length>best.spans.length||(spans.length===best.spans.length&&width<best.width))
+      best={spans,width};
+  }
+  return {spans:best.spans,matched:best.spans.length>0};
 }
 
 /* ============================================================
