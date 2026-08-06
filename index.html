@@ -227,6 +227,12 @@
   .fstar:hover{color:var(--ink);background:var(--hover);}
   .fstar.on{color:var(--pat-ink);}
   .sent-off,.sent-off *{visibility:hidden !important;}
+  .bw{position:relative;display:inline-block;}
+  .bw[data-zh]:not([data-zh=""]):hover::before{
+    content:attr(data-zh);position:absolute;left:50%;bottom:calc(100% + 7px);
+    transform:translateX(-50%);font-family:var(--sans);font-size:12.5px;line-height:1.4;
+    background:var(--ink);color:var(--on-ink-fg);padding:6px 10px;border-radius:8px;white-space:nowrap;
+    z-index:7;pointer-events:none;box-shadow:0 3px 12px rgba(0,0,0,.22);}
   .ipa{border-bottom:1px dotted var(--faint);cursor:help;position:relative;}
   .sent{position:relative;}
   .ipa[data-ipa]:hover::after,.sent[data-tr]:hover::after{
@@ -987,12 +993,19 @@ function segmentAuto(text,A,B,out){
   for(const [a,b] of merged)out.push({start:A+a,end:A+b});
 }
 
-function renderMasked(text,items,cuts,fav,ipa){
+function renderMasked(text,items,cuts,fav,ipa,others){
   // owner map: first-wins
   const owner=new Int16Array(text.length).fill(-1);
   items.forEach((it,idx)=>it.spans.forEach(sp=>{
     for(let i=sp.start;i<sp.end&&i<text.length;i++) if(owner[i]===-1) owner[i]=idx;
   }));
+  let ownerOther=null;
+  if(others&&others.length){
+    ownerOther=new Int16Array(text.length).fill(-1);
+    others.forEach((it,idx)=>it.spans.forEach(sp=>{
+      for(let i=sp.start;i<sp.end&&i<text.length;i++) if(ownerOther[i]===-1) ownerOther[i]=idx;
+    }));
+  }
   const paras=[];{
     let re=/\n{2,}/g,last=0,m;
     while((m=re.exec(text))){paras.push([last,m.index]);last=m.index+m[0].length;}
@@ -1003,7 +1016,12 @@ function renderMasked(text,items,cuts,fav,ipa){
   function emitRange(rs,re2,sIdx,st){ // render one owner-chunk walk over [rs,re2)
     let seg='',i=rs;
     while(i<re2){
-      const o=owner[i];let j=i+1;while(j<re2&&owner[j]===o)j++;
+      const o=owner[i];
+      // inside a blank, also break on the hidden side's items so a blanked
+      // pattern/phrase can carry its own zh tooltip
+      const oo=o>=0?-1:(ownerOther?ownerOther[i]:-1);
+      let j=i+1;
+      while(j<re2&&owner[j]===o&&(o>=0||(ownerOther?ownerOther[j]:-1)===oo))j++;
       const chunk=text.slice(i,j);
       if(o>=0){
         const it=items[o];
@@ -1019,7 +1037,10 @@ function renderMasked(text,items,cuts,fav,ipa){
             seg+=escHtml(core); // punctuation only: keep visible as glue
           }else{
             const w=Math.min(Math.max(core.replace(/\s+/g,' ').length,2),8);
-            seg+='<span class="blank" style="--w:'+w+'ch" data-s="'+sIdx+'"><span class="bt">'+wrapIpa(escHtml(core),ipa)+'</span></span>';
+            const blankHtml='<span class="blank" style="--w:'+w+'ch" data-s="'+sIdx+'"><span class="bt">'+wrapIpa(escHtml(core),ipa)+'</span></span>';
+            const ozh=(oo>=0&&others&&others[oo])?(others[oo].zh||''):'';
+            // .blank clips overflow, so the tooltip lives on a wrapper
+            seg+=ozh?'<span class="bw" data-zh="'+escAttr(ozh)+'">'+blankHtml+'</span>':blankHtml;
             st.hasBlank=true;
           }
         }
@@ -1492,8 +1513,9 @@ function renderCardView(a,isDaily){
   }else{
     const kind=mode==='pattern'?'pattern':'phrase';
     const items=computeItems(a,kind,parsed.text);
+    const others=computeItems(a,kind==='pattern'?'phrase':'pattern',parsed.text);
     let n=0; items.forEach(it=>{ if(it.spans.length) it.num=++n; });
-    bodyHtml=renderMasked(parsed.text,items,parsed.cuts,favInfo,ipaMap);
+    bodyHtml=renderMasked(parsed.text,items,parsed.cuts,favInfo,ipaMap,others);
     const unmatched=items.filter(it=>it.spans.length===0);
     if(unmatched.length){
       footHtml='<div class="footnote">这些'+(mode==='pattern'?'句型':'短语')+'没在全文里找到，练习时已跳过（可能是措辞不同或写错）：<br>'+
