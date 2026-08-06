@@ -734,6 +734,10 @@ function bestAlignment(text,lits){
     for(let i=1;i<lits.length;i++){const sp=findAfter(text,lits[i],cursor);if(sp){spans.push(sp);cursor=sp.end;}}
     return {spans,matched:spans.length>0};
   }
+  // a pattern normally describes ONE sentence, so prefer alignments that stay
+  // inside a single sentence before falling back to compactness
+  const sents=sentenceSpans(text);
+  const sentOf=pos=>{for(let i=0;i<sents.length;i++)if(pos>=sents[i].start&&pos<sents[i].end)return i;return -1;};
   let best=null;
   for(const st of starts){
     const spans=[st];let cursor=st.end;
@@ -742,8 +746,13 @@ function bestAlignment(text,lits){
       if(sp){spans.push(sp);cursor=sp.end;}
     }
     const width=spans[spans.length-1].end-spans[0].start;
-    if(!best||spans.length>best.spans.length||(spans.length===best.spans.length&&width<best.width))
-      best={spans,width};
+    const crossed=new Set(spans.map(s=>sentOf(s.start))).size-1;
+    const cand={spans,width,crossed};
+    if(!best
+       ||cand.spans.length>best.spans.length
+       ||(cand.spans.length===best.spans.length&&cand.crossed<best.crossed)
+       ||(cand.spans.length===best.spans.length&&cand.crossed===best.crossed&&cand.width<best.width))
+      best=cand;
   }
   return {spans:best.spans,matched:best.spans.length>0};
 }
