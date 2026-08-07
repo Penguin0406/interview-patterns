@@ -246,22 +246,26 @@
   .fstar.on{color:var(--pat-ink);}
   .sent-off,.sent-off *{visibility:hidden !important;}
   .bw{position:relative;display:inline-block;}
-  .bw[data-zh]:not([data-zh=""]):hover::before{
+  .bw[data-zh]:not([data-zh=""]):hover::before,
+  .bw[data-zh]:not([data-zh=""]).tapped::before{
     content:attr(data-zh);position:absolute;left:50%;bottom:calc(100% + 7px);
     transform:translateX(-50%);font-family:var(--sans);font-size:calc(12.5px * var(--fs));line-height:1.4;
     background:var(--ink);color:var(--on-ink-fg);padding:6px 10px;border-radius:8px;white-space:nowrap;
     z-index:7;pointer-events:none;box-shadow:0 3px 12px rgba(0,0,0,.22);}
   .ipa{border-bottom:1px dotted var(--faint);cursor:help;position:relative;}
   .sent{position:relative;}
-  .ipa[data-ipa]:hover::after,.sent[data-tr]:hover::after{
+  .ipa[data-ipa]:hover::after,.sent[data-tr]:hover::after,
+  .ipa[data-ipa].tapped::after,.sent[data-tr].tapped::after{
     content:attr(data-ipa);position:absolute;left:50%;bottom:calc(100% + 7px);
     transform:translateX(-50%);font-family:var(--sans);font-size:calc(12.5px * var(--fs));line-height:1.45;
     background:var(--ink);color:var(--on-ink-fg);padding:6px 10px;border-radius:8px;
     z-index:6;pointer-events:none;box-shadow:0 3px 12px rgba(0,0,0,.22);
     max-width:min(420px,80vw);width:max-content;white-space:normal;text-align:left;}
-  .sent[data-tr]:hover::after{content:attr(data-tr);}
-  /* hovering a word shows its phonetics instead of the sentence translation */
-  .sent[data-tr]:has(.ipa:hover)::after{display:none;}
+  .sent[data-tr]:hover::after,.sent[data-tr].tapped::after{content:attr(data-tr);}
+  /* a word's phonetics wins over the sentence translation, hover or tap */
+  .sent[data-tr]:has(.ipa:hover)::after,
+  .sent[data-tr]:has(.ipa.tapped)::after{display:none;}
+  .ipa.tapped{background:var(--chip);border-radius:4px;}
   .sbtn.on::before{content:"●";}
   .sbtn:hover{color:var(--ink);background:var(--hover);}
   .sbtn.on{color:var(--phr-ink);}
@@ -1840,10 +1844,25 @@ function renderCardView(a,isDaily){
         sb.classList.toggle('on',!allRev);
         return;
       }
+      // tap = hover on touch devices; phonetics take priority over the
+      // sentence translation, so .ipa is tested before anything text-level
+      const clearTapped=except=>card.querySelectorAll('.tapped')
+        .forEach(n=>{if(n!==except)n.classList.remove('tapped');});
+      const ip=e.target.closest('.ipa');
+      if(ip){const on=ip.classList.contains('tapped');clearTapped();ip.classList.toggle('tapped',!on);return;}
       const bl=e.target.closest('.blank');
-      if(bl){bl.classList.toggle('revealed');syncDot(bl.dataset.s);return;}
+      if(bl){
+        clearTapped();
+        bl.classList.toggle('revealed');
+        const bw=bl.closest('.bw');                 // blanked item: show its meaning too
+        if(bw)bw.classList.toggle('tapped',bl.classList.contains('revealed'));
+        syncDot(bl.dataset.s);return;
+      }
       const hl=e.target.closest('.hl');
-      if(hl){hl.classList.toggle('pinned');}
+      if(hl){clearTapped();hl.classList.toggle('pinned');return;}
+      const st=e.target.closest('.sent');
+      if(st){const on=st.classList.contains('tapped');clearTapped();st.classList.toggle('tapped',!on);return;}
+      clearTapped();
     });
   }
 }
