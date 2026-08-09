@@ -92,7 +92,7 @@
   .side-tools{display:flex;gap:8px;padding:12px 16px;border-bottom:1px solid var(--line);}
   .side-tools .btn{flex:1;}
   .qlist{overflow-y:auto;padding:10px;flex:1;min-height:0;}
-  .ghead{display:flex;align-items:center;gap:7px;padding:14px 6px 6px;
+  .ghead{display:flex;align-items:center;gap:7px;padding:14px 6px 6px;touch-action:pan-y;
          color:var(--muted);user-select:none;cursor:pointer;border-radius:8px;}
   .ghead:hover{color:var(--ink);}
   .ghead:first-child{padding-top:4px;}
@@ -135,13 +135,13 @@
   .cnt button:active{background:var(--hover);}
 
   /* drag & drop */
-  .qitem{cursor:grab;}
+  .qitem{cursor:grab;touch-action:pan-y;}
   .qitem:active{cursor:grabbing;}
   .qitem.dragging{opacity:.45;}
   .qitem.drop-above{box-shadow:0 -2.5px 0 0 var(--phr-ink);}
   .qitem.drop-below{box-shadow:0 2.5px 0 0 var(--phr-ink);}
   .ghead.drop-into,.fhead.drop-into{background:var(--hover);color:var(--ink);outline:1.5px dashed var(--faint);outline-offset:-2px;}
-  .fhead{display:flex;align-items:center;gap:7px;padding:13px 6px 6px;color:var(--muted);
+  .fhead{display:flex;align-items:center;gap:7px;padding:13px 6px 6px;color:var(--muted);touch-action:pan-y;
          user-select:none;cursor:pointer;border-radius:8px;}
   .fhead:hover{color:var(--ink);}
   .fhead .chev{display:inline-block;transition:transform .15s;font-size:calc(13px * var(--fs));line-height:1;}
@@ -335,7 +335,7 @@
            background-size:5px 5px,5px 5px;background-repeat:no-repeat;}
 
   /* ---------- phrasebook ---------- */
-  .pb-item{display:flex;align-items:flex-start;gap:9px;padding:15px 17px;margin-bottom:10px;}
+  .pb-item{display:flex;align-items:flex-start;gap:9px;padding:15px 17px;margin-bottom:10px;touch-action:pan-y;}
   .pb-drag{border:none;background:none;color:var(--faint);cursor:grab;touch-action:none;font-size:calc(14px * var(--fs));
            padding:2px 3px;margin-top:4px;flex:0 0 auto;border-radius:5px;line-height:1;}
   .pb-drag:hover{color:var(--ink);}
@@ -1319,62 +1319,87 @@ function renameFolder(fname){
   save();renderSidebar();
 }
 
-/* ---- pointer-based drag: one implementation for mouse and touch ---- */
+/* ---- pointer-based drag: whole row is draggable, mouse and touch alike ---- */
 let drag=null;
 function clearDropMarks(){
-  qlist.querySelectorAll('.drop-above,.drop-below,.drop-into')
-       .forEach(n=>n.classList.remove('drop-above','drop-below','drop-into'));
+  document.querySelectorAll('.drop-above,.drop-below,.drop-into')
+          .forEach(n=>n.classList.remove('drop-above','drop-below','drop-into'));
 }
-function dropTargetAt(x,y){
-  const el=document.elementFromPoint(x,y);
-  if(!el)return null;
-  return el.closest('[data-drop]');
-}
-function attachDrag(handle,type,key){
-  handle.addEventListener('pointerdown',ev=>{
+// Touch needs a long press before dragging, otherwise the gesture would steal
+// normal list scrolling. A press that starts on the ⠿ handle drags immediately.
+function makeDraggable(row,cfg){
+  row.addEventListener('pointerdown',ev=>{
     if(ev.button!==undefined&&ev.button!==0)return;
-    ev.preventDefault();ev.stopPropagation();
-    const startY=ev.clientY;
-    let moved=false;
-    const row=handle.closest('[data-drop]');
+    const onHandle=!!(ev.target.closest&&ev.target.closest('.dh'));
+    if(!onHandle&&ev.target.closest&&ev.target.closest('button,input,select,textarea,a'))return;
+    const touch=ev.pointerType==='touch'||ev.pointerType==='pen';
+    const x0=ev.clientX,y0=ev.clientY;
+    let dragging=false,armed=!touch||onHandle,timer=null;
+    if(onHandle)ev.preventDefault();
+    if(touch&&!onHandle){
+      timer=setTimeout(()=>{armed=true;timer=null;},320); // long press arms the drag
+    }
+    const begin=()=>{
+      dragging=true;drag=cfg;
+      row.classList.add('dragging');
+      try{row.setPointerCapture(ev.pointerId);}catch(_){}
+    };
     const onMove=e=>{
-      if(!moved&&Math.abs(e.clientY-startY)<5)return;
-      if(!moved){moved=true;drag={type,key};row&&row.classList.add('dragging');}
+      const dx=Math.abs(e.clientX-x0),dy=Math.abs(e.clientY-y0);
+      if(!dragging){
+        if(!armed){ if(dx>8||dy>8){clearTimeout(timer);timer=null;cleanup();} return; } // scrolling
+        if(dx<5&&dy<5)return;
+        begin();
+      }
       e.preventDefault();
       clearDropMarks();
-      const t=dropTargetAt(e.clientX,e.clientY);
-      if(t&&t!==row){
-        const ok=canDrop(type,t);
-        if(ok==='into')t.classList.add('drop-into');
-        else if(ok==='order'){
+      const el=document.elementFromPoint(e.clientX,e.clientY);
+      const t=el&&el.closest?el.closest(cfg.targetSel):null;
+      if(t&&t!==row&&cfg.container.contains(t)){
+        const mode=cfg.canDrop(t);
+        if(mode==='into')t.classList.add('drop-into');
+        else if(mode==='order'){
           const r=t.getBoundingClientRect();
           t.classList.add((e.clientY-r.top)>r.height/2?'drop-below':'drop-above');
         }
       }
-      // auto-scroll near the edges of the list
-      const lr=qlist.getBoundingClientRect();
-      if(e.clientY<lr.top+28)qlist.scrollTop-=12;
-      else if(e.clientY>lr.bottom-28)qlist.scrollTop+=12;
+      const lr=cfg.container.getBoundingClientRect();
+      if(e.clientY<lr.top+30)cfg.container.scrollTop-=14;
+      else if(e.clientY>lr.bottom-30)cfg.container.scrollTop+=14;
     };
     const onUp=e=>{
+      const wasDragging=dragging;
+      let t=null,below=false;
+      if(dragging){
+        const el=document.elementFromPoint(e.clientX,e.clientY);
+        t=el&&el.closest?el.closest(cfg.targetSel):null;
+        below=!!(t&&t.classList.contains('drop-below'));
+        const into=!!(t&&t.classList.contains('drop-into'));
+        if(t&&t===row)t=null;
+        if(t&&!below&&!into&&!t.classList.contains('drop-above'))t=null;
+      }
+      cleanup();
+      if(wasDragging){
+        // a drag must not also register as a tap on the row
+        document.addEventListener('click',k=>{k.stopPropagation();k.preventDefault();},{capture:true,once:true});
+        if(t)cfg.onDrop(t,below);
+      }
+    };
+    function cleanup(){
+      if(timer){clearTimeout(timer);timer=null;}
       document.removeEventListener('pointermove',onMove,true);
       document.removeEventListener('pointerup',onUp,true);
       document.removeEventListener('pointercancel',onUp,true);
-      row&&row.classList.remove('dragging');
-      if(moved){
-        const t=dropTargetAt(e.clientX,e.clientY);
-        const below=t&&t.classList.contains('drop-below');
-        clearDropMarks();
-        if(t&&t!==row)performDrop(type,key,t,below);
-      }
-      clearDropMarks();drag=null;
-    };
+      row.classList.remove('dragging');
+      clearDropMarks();
+      dragging=false;drag=null;
+    }
     document.addEventListener('pointermove',onMove,{capture:true,passive:false});
     document.addEventListener('pointerup',onUp,true);
     document.addEventListener('pointercancel',onUp,true);
   });
 }
-function canDrop(type,t){
+function canDropSidebar(type,t){
   const k=t.dataset.drop;
   if(type==='card')return k==='card'?'order':(k==='group'?'into':null);
   if(type==='group')return k==='group'?(t.dataset.g===UNGROUPED?null:'order'):(k==='folder'?'into':null);
@@ -1392,6 +1417,13 @@ function performDrop(type,key,t,below){
   }else if(type==='folder'){
     if(k==='folder')moveFolder(key,t.dataset.f,below);
   }
+}
+function attachDrag(row,type,key){
+  makeDraggable(row,{
+    container:qlist,targetSel:'[data-drop]',
+    canDrop:t=>canDropSidebar(type,t),
+    onDrop:(t,below)=>performDrop(type,key,t,below)
+  });
 }
 
 // One answer object can be rendered in two places (its own group and 收藏).
@@ -1430,10 +1462,7 @@ function buildCard(a,inFav){
   });
   el.onclick=()=>{state.selectedId=a.id;save();renderAll();closeDrawer();};
   el.onkeydown=e=>{if((e.key==='Enter'||e.key===' ')&&e.target===el){e.preventDefault();el.click();}};
-  if(!inFav){
-    const dh=el.querySelector('.dh');
-    if(dh)attachDrag(dh,'card',a.id);
-  }
+  if(!inFav)attachDrag(el,'card',a.id);
   return el;
 }
 function renderSidebar(){
@@ -1489,8 +1518,7 @@ function renderSidebar(){
     gh.querySelector('.addc').onclick=ev=>{ev.stopPropagation();openEditor(null,gname);};
     const ed=gh.querySelectorAll('.gbtn')[1];
     if(ed)ed.onclick=ev=>{ev.stopPropagation();renameGroup(gname);};
-    const dh=gh.querySelector('.dh');
-    if(dh)attachDrag(dh,'group',gname);
+    if(isReal)attachDrag(gh,'group',gname);
     qlist.appendChild(gh);
     if(open){
       if(!list.length){
@@ -1523,7 +1551,7 @@ function renderSidebar(){
     fh.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();fh.click();}};
     fh.querySelector('.addg').onclick=ev=>{ev.stopPropagation();newGroup(fname);};
     fh.querySelector('.fedit').onclick=ev=>{ev.stopPropagation();renameFolder(fname);};
-    attachDrag(fh.querySelector('.dh'),'folder',fname);
+    attachDrag(fh,'folder',fname);
     qlist.appendChild(fh);
     if(open){
       if(!inner.length){
@@ -1612,7 +1640,9 @@ function moveDaily(srcId,targetId,after){
   save();renderMain();
 }
 function renderDailyBoard(){
-  const shown=state.daily.filter(e=>!state.pbFavOnly||e.fav);
+  const base=state.daily.filter(e=>!state.pbFavOnly||e.fav);
+  // favourites float to the top; relative order within each part is preserved
+  const shown=base.filter(e=>e.fav).concat(base.filter(e=>!e.fav));
   let itemsHtml='';
   for(const e of shown){
     itemsHtml+='<div class="card pb-item" data-id="'+e.id+'">'
@@ -1699,41 +1729,12 @@ function renderDailyBoard(){
       if(zhEl)zhEl.hidden=!zhEl.hidden;
     }
   });
-  // drag to reorder: pointer-based so it works with touch as well as mouse
+  // drag to reorder: whole row, pointer-based so touch works too
   listEl.querySelectorAll('.pb-item').forEach(el=>{
-    const handle=el.querySelector('.pb-drag');
-    if(!handle)return;
-    handle.addEventListener('pointerdown',ev=>{
-      if(ev.button!==undefined&&ev.button!==0)return;
-      ev.preventDefault();ev.stopPropagation();
-      const startY=ev.clientY;let moved=false;
-      const rowAt=(x,y)=>{const t=document.elementFromPoint(x,y);return t?t.closest('.pb-item'):null;};
-      const onMove=e=>{
-        if(!moved&&Math.abs(e.clientY-startY)<5)return;
-        if(!moved){moved=true;el.classList.add('dragging');}
-        e.preventDefault();clearMarks();
-        const t=rowAt(e.clientX,e.clientY);
-        if(t&&t!==el){
-          const r=t.getBoundingClientRect();
-          t.classList.add((e.clientY-r.top)>r.height/2?'drop-below':'drop-above');
-        }
-      };
-      const onUp=e=>{
-        document.removeEventListener('pointermove',onMove,true);
-        document.removeEventListener('pointerup',onUp,true);
-        document.removeEventListener('pointercancel',onUp,true);
-        el.classList.remove('dragging');
-        if(moved){
-          const t=rowAt(e.clientX,e.clientY);
-          const below=t&&t.classList.contains('drop-below');
-          clearMarks();
-          if(t&&t!==el)moveDaily(el.dataset.id,t.dataset.id,below);
-        }
-        clearMarks();
-      };
-      document.addEventListener('pointermove',onMove,{capture:true,passive:false});
-      document.addEventListener('pointerup',onUp,true);
-      document.addEventListener('pointercancel',onUp,true);
+    makeDraggable(el,{
+      container:listEl,targetSel:'.pb-item',
+      canDrop:()=>'order',
+      onDrop:(t,below)=>moveDaily(el.dataset.id,t.dataset.id,below)
     });
   });
   if(typeof markCached==='function')markCached();
