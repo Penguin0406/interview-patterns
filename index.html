@@ -368,7 +368,9 @@
   .daily-count{font-family:var(--mono);font-size:calc(11px * var(--fs));color:var(--muted);}
 
   /* ---------- study stopwatch ---------- */
-  .stopwatch{position:fixed;top:12px;right:14px;z-index:45;font-family:var(--sans);}
+  .stopwatch{position:fixed;top:12px;right:14px;z-index:45;font-family:var(--sans);touch-action:none;}
+  .stopwatch.sw-drag{opacity:.9;}
+  .stopwatch.sw-drag *{user-select:none;-webkit-user-select:none;}
   .sw-tab{display:none;border:1px solid var(--line-strong);background:var(--card);color:var(--muted);
           width:34px;height:34px;border-radius:10px;cursor:pointer;font-size:calc(15px * var(--fs));}
   .sw-tab:hover{color:var(--ink);}
@@ -377,13 +379,15 @@
   .sw-body{background:var(--card);border:1px solid var(--line-strong);border-radius:12px;
            padding:9px 11px;min-width:150px;box-shadow:0 2px 10px rgba(0,0,0,.10);}
   .sw-time{font-family:var(--mono);font-size:calc(19px * var(--fs));font-weight:600;color:var(--ink);
-           text-align:center;letter-spacing:.5px;}
+           text-align:center;letter-spacing:.5px;cursor:grab;}
+  .stopwatch.sw-drag .sw-time{cursor:grabbing;}
   .sw-time.running{color:var(--pat-ink);}
   .sw-btns{display:flex;gap:5px;margin-top:7px;}
   .sw-btns .btn{padding:4px 8px;font-size:calc(12px * var(--fs));flex:0 0 auto;}
   .sw-btns #swToggle{flex:1;}
   .sw-list{margin-top:8px;border-top:1px solid var(--line);padding-top:7px;
-           max-height:190px;overflow-y:auto;font-family:var(--mono);font-size:calc(11.5px * var(--fs));color:var(--muted);}
+           max-height:190px;overflow-y:auto;font-family:var(--mono);font-size:calc(11.5px * var(--fs));color:var(--muted);
+           touch-action:pan-y;}
   .sw-list[hidden]{display:none;}
   .sw-row{display:flex;justify-content:space-between;gap:10px;padding:2px 0;}
   .sw-row b{color:var(--ink);font-weight:600;}
@@ -508,7 +512,7 @@
 <div class="stopwatch" id="sw">
   <button class="sw-tab" id="swTab" title="学习计时" aria-label="展开学习计时">⏱</button>
   <div class="sw-body">
-    <div class="sw-time" id="swTime">0:00</div>
+    <div class="sw-time" id="swTime" title="拖动可移动位置，双击复位">0:00</div>
     <div class="sw-btns">
       <button class="btn" id="swToggle">开始</button>
       <button class="btn ghost" id="swHist" title="历史记录">📅</button>
@@ -2072,16 +2076,54 @@ document.getElementById('pasteBox').addEventListener('paste',()=>setTimeout(runP
    ============================================================ */
 document.getElementById('newGroupBtn').onclick=()=>newGroup(state.openFolder||null);
 document.getElementById('newFolderBtn').onclick=()=>newFolder();
-// put local items into the imported sequence; items absent from the import keep
-// their relative order and follow at the end
-function applyImportedOrder(list,importedList,keyOf){
-  if(!Array.isArray(importedList)||!importedList.length)return list;
-  const rank=new Map();
-  importedList.forEach((x,i)=>{const k=keyOf(x);if(k&&!rank.has(k))rank.set(k,i);});
-  const matched=[],rest=[];
-  list.forEach(x=>{(rank.has(keyOf(x))?matched:rest).push(x);});
-  matched.sort((a,b)=>rank.get(keyOf(a))-rank.get(keyOf(b)));
-  return matched.concat(rest);
+/* ---- backup payload: every card and every daily entry goes out with a full
+   field set, so sentences, per-segment favourites, review counts, translations
+   and IPA survive a round trip even when an entry never had one of them ---- */
+function packEntry(x){
+  return Object.assign({},x,{
+    patterns:Array.isArray(x.patterns)?x.patterns:[],
+    phrases:Array.isArray(x.phrases)?x.phrases:[],
+    fullText:x.fullText||'',
+    transText:x.transText||'',
+    ipaText:x.ipaText||'',
+    sentFavs:Array.isArray(x.sentFavs)?x.sentFavs:[],
+    reviews:Number(x.reviews)||0
+  });
+}
+function packDaily(x){return Object.assign(packEntry(x),{zh:x.zh||'',fav:!!x.fav});}
+function normKey(s){return String(s||'').replace(/\s+/g,' ').trim().toLowerCase();}
+function cardKey(x){return normKey(x&&x.title);}
+// cut markers are stripped first, so re-cutting a sentence still counts as the
+// same entry instead of importing as a duplicate
+function dailyKey(x){return normKey(parseCuts(String(x&&x.fullText||'')).text);}
+// merge one list: same id wins, otherwise same key (title / sentence text).
+// Matched local objects are updated in place, so ids, selection and references
+// hold; order follows the backup and local-only items trail behind in their
+// existing relative order.
+function mergeList(local,imported,keyOf,taken){
+  const byId=new Map(),byKey=new Map();
+  local.forEach(x=>{
+    if(x.id&&!byId.has(x.id))byId.set(x.id,x);
+    const k=keyOf(x);if(k&&!byKey.has(k))byKey.set(k,x);
+  });
+  const seq=[],used=new Set();let added=0,updated=0;
+  imported.forEach(src=>{
+    let tgt=src.id?byId.get(src.id):null;
+    if(!tgt||used.has(tgt)){
+      const k=keyOf(src),c=k?byKey.get(k):null;
+      tgt=(c&&!used.has(c))?c:null;
+    }
+    if(tgt){
+      Object.keys(src).forEach(k=>{if(k!=='id')tgt[k]=src[k];});
+      updated++;
+    }else{
+      tgt=Object.assign({},src);
+      tgt.id=(src.id&&!taken.has(src.id))?src.id:uid();
+      added++;
+    }
+    taken.add(tgt.id);used.add(tgt);seq.push(tgt);
+  });
+  return {list:seq.concat(local.filter(x=>!used.has(x))),added:added,updated:updated};
 }
 function blobToB64(blob){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(String(r.result).split(',')[1]||'');r.onerror=()=>rej(r.error);r.readAsDataURL(blob);});}
 function b64ToBlob(b64){const bin=atob(b64);const u=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);return new Blob([u],{type:'audio/mpeg'});}
@@ -2094,10 +2136,12 @@ document.getElementById('exportBtn').onclick=async()=>{
       if(vals[i]&&vals[i].size)audio.push({k:keys[i],d:await blobToB64(vals[i])});
     }
   }catch(e){}
-  // answers/daily array order IS the card order; groupOrder and study time ride along
+  // answers/daily array order IS the display order; groupOrder and study time ride along
   const study=(typeof swData==='object'&&swData&&swData.days)?swData.days:{};
   const blob=new Blob([JSON.stringify({
-    answers:state.answers,daily:state.daily,
+    v:2,appTitle:state.appTitle||DEF_TITLE,
+    answers:state.answers.map(packEntry),daily:state.daily.map(packDaily),
+    dailyPrefs:{pbMode:state.pbMode,pbShowZh:!!state.pbShowZh,pbFavOnly:!!state.pbFavOnly},
     groupOrder:state.groupOrder,groups:state.groups,folders:state.folders,groupFolder:state.groupFolder,study,audio
   })],{type:'application/json'});
   const url=URL.createObjectURL(blob);const a=document.createElement('a');
@@ -2109,62 +2153,63 @@ document.getElementById('importFile').onchange=e=>{
   const file=e.target.files[0];if(!file)return;
   const rd=new FileReader();
   rd.onload=async()=>{
+    let d=null;
+    try{d=JSON.parse(rd.result);}catch(err){alert('读取失败：文件不是有效的 JSON。');return;}
     try{
-      const d=JSON.parse(rd.result);
-      const imported=(d.answers||d||[]).filter(x=>x&&(x.fullText!==undefined||Array.isArray(x.items)));
-      if(!imported.length){alert('这个文件里没有找到可导入的回答。');return;}
-      let importSummary='';
-      const append=confirm('导入 '+imported.length+' 条。选「确定」合并到现有内容（同名内容会被导入的版本覆盖），选「取消」则替换全部。');
+      const rawA=Array.isArray(d&&d.answers)?d.answers:(Array.isArray(d)?d:[]);
+      // a backup holding only 日常用语 is a valid backup: never gate on cards
+      const impA=rawA.filter(x=>x&&(x.fullText!==undefined||Array.isArray(x.items))).map(packEntry);
+      const impD=(Array.isArray(d&&d.daily)?d.daily:[]).filter(x=>x&&x.fullText!==undefined).map(packDaily);
+      if(!impA.length&&!impD.length){alert('这个文件里没有找到可导入的内容。');return;}
+      const append=confirm('导入 '+impA.length+' 张卡片、'+impD.length+' 条日常用语。选「确定」合并到现有内容（同名内容会被导入的版本覆盖），选「取消」则替换全部。');
+      let sumA='',sumD='';
       if(append){
-        let added=0,updated=0;
-        imported.forEach(x=>{
-          const t=(x.title||'').trim();
-          const ex=t?state.answers.find(a=>(a.title||'').trim()===t):null;
-          if(ex){
-            // same title: overwrite in place, keep the local card's id and position
-            Object.keys(x).forEach(k=>{if(k!=='id')ex[k]=x[k];});
-            updated++;
-          }else{
-            x.id=uid();state.answers.push(x);added++;
-          }
-        });
-        importSummary='覆盖 '+updated+' 张同名卡片，新增 '+added+' 张';
+        const taken=new Set();
+        state.answers.forEach(x=>{if(x.id)taken.add(x.id);});
+        state.daily.forEach(x=>{if(x.id)taken.add(x.id);});
+        const ra=mergeList(state.answers,impA,cardKey,taken);
+        state.answers=ra.list;
+        const rb=mergeList(state.daily,impD,dailyKey,taken);
+        state.daily=rb.list;
+        sumA='卡片覆盖 '+ra.updated+' 张、新增 '+ra.added+' 张';
+        sumD='日常用语覆盖 '+rb.updated+' 条、新增 '+rb.added+' 条';
       }else{
-        state.answers=imported.map(x=>({...x,id:uid()}));
-        state.daily=[];
-      }
-      if(Array.isArray(d.daily)&&d.daily.length){
-        d.daily.forEach(x=>{
-          if(!x||x.fullText===undefined)return;
-          const t=(x.fullText||'').trim();
-          const ex=t?state.daily.find(y=>(y.fullText||'').trim()===t):null;
-          if(ex){Object.keys(x).forEach(k=>{if(k!=='id')ex[k]=x[k];});}
-          else{x.id=uid();state.daily.push(x);}
-        });
+        const taken=new Set();
+        const fresh=x=>{const y=Object.assign({},x);if(!y.id||taken.has(y.id))y.id=uid();taken.add(y.id);return y;};
+        state.answers=impA.map(fresh);
+        state.daily=impD.map(fresh);
+        sumA='已替换为 '+state.answers.length+' 张卡片';
+        sumD='日常用语 '+state.daily.length+' 条';
+        // a full replace also restores the title and the 日常用语 view switches
+        if(d&&typeof d.appTitle==='string'&&d.appTitle.trim())state.appTitle=d.appTitle.trim();
+        const p=d&&d.dailyPrefs;
+        if(p&&typeof p==='object'){
+          if(p.pbMode==='full'||p.pbMode==='pattern'||p.pbMode==='phrase')state.pbMode=p.pbMode;
+          if('pbShowZh'in p)state.pbShowZh=!!p.pbShowZh;
+          if('pbFavOnly'in p)state.pbFavOnly=!!p.pbFavOnly;
+        }
+        if(typeof applyTitle==='function')applyTitle();
       }
       migratePhrasebooks();
-      // card / daily order follows the imported file
-      state.answers=applyImportedOrder(state.answers,d.answers,x=>(x&&x.title||'').trim());
-      state.daily=applyImportedOrder(state.daily,d.daily,x=>(x&&x.fullText||'').trim());
       // group order: imported sequence first, groups only present locally after it
-      if(Array.isArray(d.groups)){
+      if(Array.isArray(d&&d.groups)){
         const localOnly=(state.groups||[]).filter(g=>d.groups.indexOf(g)<0);
         state.groups=append?d.groups.concat(localOnly):d.groups.slice();
       }
-      if(Array.isArray(d.folders)){
+      if(Array.isArray(d&&d.folders)){
         const localOnlyF=(state.folders||[]).filter(f=>d.folders.indexOf(f)<0);
         state.folders=append?d.folders.concat(localOnlyF):d.folders.slice();
       }else if(!append){state.folders=[];}
-      if(d.groupFolder&&typeof d.groupFolder==='object'){
+      if(d&&d.groupFolder&&typeof d.groupFolder==='object'){
         state.groupFolder=append?Object.assign({},state.groupFolder,d.groupFolder):Object.assign({},d.groupFolder);
       }else if(!append){state.groupFolder={};}
-      if(Array.isArray(d.groupOrder)){
+      if(Array.isArray(d&&d.groupOrder)){
         const localOnly=(state.groupOrder||[]).filter(g=>d.groupOrder.indexOf(g)<0);
         state.groupOrder=append?d.groupOrder.concat(localOnly):d.groupOrder.slice();
       }else if(!append){state.groupOrder=[];}
       // study time: same-date totals are overwritten, other dates kept
       let days=0;
-      if(d.study&&typeof d.study==='object'){
+      if(d&&d.study&&typeof d.study==='object'){
         if(!append)swData.days={};
         Object.keys(d.study).forEach(k=>{
           const v=Number(d.study[k]);
@@ -2172,20 +2217,21 @@ document.getElementById('importFile').onchange=e=>{
         });
         swSave();if(typeof swRender==='function')swRender();
       }
-      state.selectedId=state.answers[0]?state.answers[0].id:(state.daily.length?'__daily__':null);
+      if(state.selectedId!=='__daily__'&&!state.answers.find(a=>a.id===state.selectedId))
+        state.selectedId=state.answers[0]?state.answers[0].id:(state.daily.length?'__daily__':null);
       // restore bundled audio into the local cache
-      if(Array.isArray(d.audio)&&d.audio.length){
-        let n=0;
+      let clips=0;
+      if(Array.isArray(d&&d.audio)&&d.audio.length){
         for(const c of d.audio){
-          if(c&&c.k&&c.d){try{await idbPut(c.k,b64ToBlob(c.d));n++;}catch(e){}}
+          if(c&&c.k&&c.d){try{await idbPut(c.k,b64ToBlob(c.d));clips++;}catch(e){}}
         }
-        if(n)console.log('restored',n,'audio clips');
       }
       save();renderAll();
-      alert('导入完成：'+(importSummary||'已替换全部内容')
+      alert('导入完成：'+sumA+'；'+sumD
         +'；顺序已按备份恢复'
-        +(days?('；学习时长恢复 '+days+' 天'):'')+'。');
-    }catch(err){alert('读取失败：文件不是有效的 JSON。');}
+        +(days?('；学习时长恢复 '+days+' 天'):'')
+        +(clips?('；音频恢复 '+clips+' 条'):'')+'。');
+    }catch(err){alert('导入失败：'+(err&&err.message||err));}
   };
   rd.readAsText(file);
   e.target.value='';
@@ -2544,13 +2590,23 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape'&&$('ttsOverlay').cla
    Study stopwatch: per-day totals, history kept, never auto-runs
    ============================================================ */
 const SW_KEY='study_time_v1';
-let swData={days:{},collapsed:false}, swRunning=false, swStart=0, swTick=null;
+// pos is the panel's own top-left in viewport px; null means "default corner"
+let swData={days:{},collapsed:true,pos:null,v:2}, swRunning=false, swStart=0, swTick=null;
 function swToday(){
   const d=new Date();
   return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 }
 function swLoad(){
-  try{const r=localStorage.getItem(SW_KEY);if(r){const d=JSON.parse(r);swData={days:d.days||{},collapsed:!!d.collapsed};}}catch(e){}
+  let d=null;
+  try{const r=localStorage.getItem(SW_KEY);if(r)d=JSON.parse(r);}catch(e){}
+  if(!d||typeof d!=='object')return;
+  swData.days=d.days||{};
+  swData.pos=(d.pos&&isFinite(d.pos.x)&&isFinite(d.pos.y))?{x:+d.pos.x,y:+d.pos.y}:null;
+  // records written before v2 predate "collapsed by default": fold them in once,
+  // then keep respecting whatever the user last chose
+  swData.collapsed=(d.v>=2)?!!d.collapsed:true;
+  swData.v=2;
+  if(!(d.v>=2))swSave();
 }
 function swSave(){try{localStorage.setItem(SW_KEY,JSON.stringify(swData));}catch(e){}}
 function swBase(){return swData.days[swToday()]||0;}          // seconds banked today
@@ -2565,6 +2621,22 @@ function swRender(){
   t.classList.toggle('running',swRunning);
   document.getElementById('swToggle').textContent=swRunning?'暂停':'开始';
   document.getElementById('sw').classList.toggle('collapsed',!!swData.collapsed);
+  swApplyPos();
+}
+// keep the panel where it was dropped, and always fully inside the viewport
+function swApplyPos(){
+  const el=document.getElementById('sw');
+  if(!swData.pos){el.style.left='';el.style.top='';el.style.right='';return;}
+  el.style.right='auto';
+  el.style.left=swData.pos.x+'px';
+  el.style.top=swData.pos.y+'px';
+  const r=el.getBoundingClientRect(),m=4;
+  const x=Math.min(Math.max(swData.pos.x,m),Math.max(m,window.innerWidth-r.width-m));
+  const y=Math.min(Math.max(swData.pos.y,m),Math.max(m,window.innerHeight-r.height-m));
+  if(x!==swData.pos.x||y!==swData.pos.y){
+    swData.pos={x:x,y:y};
+    el.style.left=x+'px';el.style.top=y+'px';
+  }
 }
 function swBank(){
   if(!swRunning)return;
@@ -2606,6 +2678,60 @@ document.getElementById('swHist').onclick=function(){
 };
 document.getElementById('swHide').onclick=()=>{swData.collapsed=true;swSave();swRender();};
 document.getElementById('swTab').onclick=()=>{swData.collapsed=false;swSave();swRender();};
+// dblclick on the clock puts the panel back in its default corner
+document.getElementById('swTime').addEventListener('dblclick',()=>{swData.pos=null;swSave();swApplyPos();});
+/* ---- move the panel: pointer events, so touch works like mouse ----
+   the clock face and the panel padding drag straight away, the collapsed
+   tab needs a long press on touch so a plain tap still expands it */
+(function(){
+  const el=document.getElementById('sw');
+  el.addEventListener('pointerdown',ev=>{
+    if(ev.button!==undefined&&ev.button!==0)return;
+    const t=ev.target;
+    if(t.closest&&t.closest('.sw-list'))return;
+    const onTab=!!(t.closest&&t.closest('#swTab'));
+    if(!onTab&&t.closest&&t.closest('button,input,select,textarea,a'))return;
+    const touch=ev.pointerType==='touch'||ev.pointerType==='pen';
+    const r=el.getBoundingClientRect();
+    const ox=r.left,oy=r.top,x0=ev.clientX,y0=ev.clientY;
+    let dragging=false,armed=!(touch&&onTab),timer=null;
+    if(!onTab)ev.preventDefault();
+    if(touch&&onTab)timer=setTimeout(()=>{armed=true;timer=null;},320);
+    const onMove=e=>{
+      const dx=Math.abs(e.clientX-x0),dy=Math.abs(e.clientY-y0);
+      if(!dragging){
+        if(!armed){if(dx>8||dy>8){cleanup();}return;}
+        if(dx<5&&dy<5)return;
+        dragging=true;el.classList.add('sw-drag');
+        try{el.setPointerCapture(ev.pointerId);}catch(_){}
+      }
+      e.preventDefault();
+      swData.pos={x:ox+(e.clientX-x0),y:oy+(e.clientY-y0)};
+      swApplyPos();
+    };
+    const onUp=()=>{
+      const was=dragging;
+      cleanup();
+      if(was){
+        swSave();
+        // a drag must not also register as a tap on the tab
+        document.addEventListener('click',k=>{k.stopPropagation();k.preventDefault();},{capture:true,once:true});
+      }
+    };
+    function cleanup(){
+      if(timer){clearTimeout(timer);timer=null;}
+      document.removeEventListener('pointermove',onMove,true);
+      document.removeEventListener('pointerup',onUp,true);
+      document.removeEventListener('pointercancel',onUp,true);
+      el.classList.remove('sw-drag');
+      dragging=false;
+    }
+    document.addEventListener('pointermove',onMove,{capture:true,passive:false});
+    document.addEventListener('pointerup',onUp,true);
+    document.addEventListener('pointercancel',onUp,true);
+  });
+  window.addEventListener('resize',()=>swApplyPos());
+})();
 // second-level UI refresh while running
 setInterval(()=>{if(swRunning){swRender();const b=document.getElementById('swList');if(b&&!b.hidden)swRenderHist();}},1000);
 // never keep counting across a reload: bank on the way out
