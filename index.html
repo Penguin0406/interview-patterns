@@ -271,14 +271,17 @@
   .sbtn:hover{color:var(--ink);background:var(--hover);}
   .sbtn.zh{color:var(--pat-ink);}
   .sbtn.on{color:var(--phr-ink);}
-  /* stage 1 of the dot: the blank stays masked, its meaning sits beside it */
-  .bw.zh-on::after{
+  /* the blank stays masked and its meaning sits beside it: either one sentence
+     at a time via the dot (.zh-on) or the whole card at once (.reveal-zh) */
+  .bw.zh-on::after,.card.reveal-zh .bw.zh1::after{
     content:attr(data-zh);font-family:var(--sans);font-size:.62em;font-weight:500;
     margin-left:5px;padding:1px 6px;border-radius:5px;vertical-align:2px;
     background:var(--chip);color:var(--muted);white-space:normal;}
   /* specificity has to match the .bw tooltip rules above, or the chip and the
      bubble would both show on hover */
-  .bw.zh-on[data-zh]:hover::before,.bw.zh-on[data-zh].tapped::before{display:none;}
+  .bw.zh-on[data-zh]:hover::before,.bw.zh-on[data-zh].tapped::before,
+  .card.reveal-zh .bw.zh1[data-zh]:hover::before,
+  .card.reveal-zh .bw.zh1[data-zh].tapped::before{display:none;}
   @media (forced-colors:active){
     .blank{border-bottom-width:2px;}
     /* high-contrast mode strips custom slider styling: fall back to the native control */
@@ -852,7 +855,7 @@ function bestAlignment(text,lits){
    ============================================================ */
 const LS_KEY='interview_practice_v1';
 const DEF_TITLE='流畅表达任何事';
-let state={answers:[],selectedId:null,mode:'full',showZh:false,revealAll:false,openGroup:null,pbShowZh:false,pbFavOnly:false,pbMode:'pattern',daily:[],dailyOpen:null,appTitle:DEF_TITLE,favOnlySent:false,groupOrder:[],groups:[],folders:[],groupFolder:{},openFolder:null};
+let state={answers:[],selectedId:null,mode:'full',showZh:false,revealAll:false,revealZh:false,openGroup:null,pbShowZh:false,pbFavOnly:false,pbMode:'pattern',daily:[],dailyOpen:null,appTitle:DEF_TITLE,favOnlySent:false,groupOrder:[],groups:[],folders:[],groupFolder:{},openFolder:null};
 
 function uid(){return 'a'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
 
@@ -1169,8 +1172,10 @@ function renderMasked(text,items,cuts,fav,ipa,others){
             const w=Math.min(Math.max(core.replace(/\s+/g,' ').length,2),8);
             const blankHtml='<span class="blank" style="--w:'+w+'ch" data-s="'+sIdx+'"><span class="bt">'+wrapIpa(escHtml(core),ipa)+'</span></span>';
             const ozh=(oo>=0&&otherZh)?(otherZh[oo]||''):'';
+            const first=ozh&&!st.zhSeen.has(ozh);
+            if(ozh)st.zhSeen.add(ozh);
             // .blank clips overflow, so the tooltip lives on a wrapper
-            seg+=ozh?'<span class="bw" data-s="'+sIdx+'" data-zh="'+escAttr(ozh)+'">'+blankHtml+'</span>':blankHtml;
+            seg+=ozh?'<span class="bw'+(first?' zh1':'')+'" data-s="'+sIdx+'" data-zh="'+escAttr(ozh)+'">'+blankHtml+'</span>':blankHtml;
             st.hasBlank=true;
           }
         }
@@ -1188,7 +1193,9 @@ function renderMasked(text,items,cuts,fav,ipa,others){
     for(let s=0;s<sents.length;s++){
       const ss=Math.max(sents[s].start,ps), se=Math.min(sents[s].end,pe);
       if(se<=ss)continue;
-      const st={hasBlank:false};
+      // one meaning usually owns several gaps in a sentence; only the first of
+      // them carries the label, so a line never repeats the same Chinese
+      const st={hasBlank:false,zhSeen:new Set()};
       let mySegs=allSegs.filter(g=>g.start>=sents[s].start&&g.end<=sents[s].end);
       if(!mySegs.length)mySegs=[{start:sents[s].start,end:sents[s].end}];
       let sentHtml='';
@@ -1837,7 +1844,8 @@ function renderCardView(a,isDaily){
         unmatched.map(it=>'<b>'+escHtml(it.en)+'</b>'+(it.zh?'（'+escHtml(it.zh)+'）':'')).join('；')+'</div>';
     }
   }
-  const cardCls='card'+(state.showZh?' show-zh':'')+(state.revealAll?' reveal-blanks':'');
+  const cardCls='card'+(state.showZh?' show-zh':'')+(state.revealAll?' reveal-blanks':'')
+    +(state.revealZh?' reveal-zh':'');
   mainInner.innerHTML=
     (isDaily
       ?'<button class="linkbtn" id="dailyBack" style="margin-bottom:8px;">← 返回日常用语</button>'
@@ -1851,6 +1859,7 @@ function renderCardView(a,isDaily){
       '</div>'+
       '<div class="aux">'+
         '<button class="toggle'+(state.favOnlySent?' on':'')+'" id="tFavOnly">只看收藏</button>'+
+        '<button class="toggle'+(state.revealZh?' on':'')+'" id="tRevealZh"'+(mode==='full'?' hidden':'')+'>显示挖空中文</button>'+
         '<button class="toggle'+(state.revealAll?' on':'')+'" id="tReveal"'+(mode==='full'?' hidden':'')+'>显示全部原文</button>'+
         '<button class="toggle'+(state.showZh?' on':'')+'" id="tZh"'+(mode==='full'?' hidden':'')+'>显示中文</button>'+
       '</div>'+
@@ -1867,6 +1876,7 @@ function renderCardView(a,isDaily){
     b.onclick=()=>{state.mode=b.dataset.m;renderMain();};
   });
   const tF=document.getElementById('tFavOnly'); if(tF)tF.onclick=()=>{state.favOnlySent=!state.favOnlySent;renderMain();};
+  const tRz=document.getElementById('tRevealZh'); if(tRz)tRz.onclick=()=>{state.revealZh=!state.revealZh;renderMain();};
   const tR=document.getElementById('tReveal'); if(tR)tR.onclick=()=>{state.revealAll=!state.revealAll;renderMain();};
   const tZ=document.getElementById('tZh'); if(tZ)tZ.onclick=()=>{state.showZh=!state.showZh;save();renderMain();};
   document.getElementById('editInline').onclick=()=>{isDaily?openDailyEditor(a.id):openEditor(a.id);};
@@ -1880,7 +1890,7 @@ function renderCardView(a,isDaily){
   if(card){
     /* the per-sentence dot cycles 0 masked -> 1 meanings -> 2 原文 -> 0 */
     const dotBlanks=s=>card.querySelectorAll('.blank[data-s="'+s+'"]');
-    const dotZh=s=>card.querySelectorAll('.bw[data-s="'+s+'"][data-zh]:not([data-zh=""])');
+    const dotZh=s=>card.querySelectorAll('.bw.zh1[data-s="'+s+'"][data-zh]:not([data-zh=""])');
     const paintDot=(sb,stage)=>{
       sb.dataset.stage=String(stage);
       sb.classList.toggle('zh',stage===1);
@@ -1889,15 +1899,7 @@ function renderCardView(a,isDaily){
     const setDot=(sb,stage)=>{
       const s=sb.dataset.s;
       dotBlanks(s).forEach(b=>b.classList.toggle('revealed',stage===2));
-      // one clause of a pattern usually owns several gaps: label the first of
-      // them and leave the repeats bare, otherwise the line reads twice over
-      const seen=new Set();
-      dotZh(s).forEach(n=>{
-        const k=n.dataset.zh;
-        const first=stage===1&&!seen.has(k);
-        seen.add(k);
-        n.classList.toggle('zh-on',first);
-      });
+      dotZh(s).forEach(n=>n.classList.toggle('zh-on',stage===1));
       paintDot(sb,stage);
     };
     // a blank tapped on its own can complete or break a stage: keep the dot honest
