@@ -266,9 +266,19 @@
   .sent[data-tr]:has(.ipa:hover)::after,
   .sent[data-tr]:has(.ipa.tapped)::after{display:none;}
   .ipa.tapped{background:var(--chip);border-radius:4px;}
+  .sbtn.zh::before{content:"◐";}
   .sbtn.on::before{content:"●";}
   .sbtn:hover{color:var(--ink);background:var(--hover);}
+  .sbtn.zh{color:var(--pat-ink);}
   .sbtn.on{color:var(--phr-ink);}
+  /* stage 1 of the dot: the blank stays masked, its meaning sits beside it */
+  .bw.zh-on::after{
+    content:attr(data-zh);font-family:var(--sans);font-size:.62em;font-weight:500;
+    margin-left:5px;padding:1px 6px;border-radius:5px;vertical-align:2px;
+    background:var(--chip);color:var(--muted);white-space:normal;}
+  /* specificity has to match the .bw tooltip rules above, or the chip and the
+     bubble would both show on hover */
+  .bw.zh-on[data-zh]:hover::before,.bw.zh-on[data-zh].tapped::before{display:none;}
   @media (forced-colors:active){
     .blank{border-bottom-width:2px;}
     /* high-contrast mode strips custom slider styling: fall back to the native control */
@@ -761,9 +771,46 @@ function findAll(text,query){
   while((m=re.exec(text))&&guard++<800){out.push({start:m.index,end:m.index+m[0].length});if(m.index===re.lastIndex)re.lastIndex++;}
   return out;
 }
-function matchPattern(text,pat){
-  const lits=normApos(pat).split(/\s*(?:\.\.\.|…)\s*/).map(s=>s.trim()).filter(Boolean);
-  return bestAlignment(text,lits);
+const CLAUSE_SEP=/[,，;；]/;
+// literal segments of a pattern, each with its offset inside the pattern text
+function patternLiterals(p){
+  const out=[];const re=/\s*(?:\.\.\.|…)\s*/g;let last=0,m;
+  const add=(raw,off)=>{const t=raw.trim();if(t)out.push({t:t,at:off+raw.indexOf(t)});};
+  while((m=re.exec(p))){add(p.slice(last,m.index),last);last=m.index+m[0].length;}
+  add(p.slice(last),last);
+  return out;
+}
+// A long pattern usually chains two clauses with a comma and its Chinese does the
+// same. When both sides split into the same number of clauses, each literal
+// segment carries only its own clause, so a blanked pattern shows the half of the
+// meaning that belongs where the blank is instead of the whole sentence at every
+// gap. Bail out unless the split is clean: a literal segment that straddles a
+// comma covers both clauses at once and would be labelled with only the first.
+function attachClauseZh(spans,p,lits,zh){
+  if(!spans||!spans.length)return;
+  const parts=String(zh||'').split(new RegExp(CLAUSE_SEP.source,'g')).map(s=>s.trim()).filter(Boolean);
+  if(parts.length<2)return;
+  const cuts=[];{const re=new RegExp(CLAUSE_SEP.source,'g');let m;while((m=re.exec(p)))cuts.push(m.index);}
+  if(cuts.length+1!==parts.length)return;
+  // a comma sitting at the very start of a segment is that segment's own lead-in,
+  // not a straddle
+  for(const l of lits)
+    for(const c of cuts)
+      if(c>l.at&&c<l.at+l.t.length)return;
+  spans.forEach(sp=>{
+    const l=lits[sp.li];if(!l)return;
+    const w=l.t.search(/[A-Za-z0-9\u00C0-\u017F]/);
+    const pos=l.at+(w>0?w:0);
+    let n=0;while(n<cuts.length&&cuts[n]<pos)n++;
+    sp.zh=parts[Math.min(n,parts.length-1)];
+  });
+}
+function matchPattern(text,pat,zh){
+  const p=normApos(pat);
+  const lits=patternLiterals(p);
+  const r=bestAlignment(text,lits.map(l=>l.t));
+  attachClauseZh(r.spans,p,lits,zh);
+  return r;
 }
 // Try every occurrence of the first literal as an anchor and keep the best
 // alignment (most literals matched, then most compact). A greedy first-hit
@@ -773,7 +820,7 @@ function bestAlignment(text,lits){
   const starts=findAll(text,lits[0]);
   if(!starts.length){
     const spans=[];let cursor=0;
-    for(let i=1;i<lits.length;i++){const sp=findAfter(text,lits[i],cursor);if(sp){spans.push(sp);cursor=sp.end;}}
+    for(let i=1;i<lits.length;i++){const sp=findAfter(text,lits[i],cursor);if(sp){sp.li=i;spans.push(sp);cursor=sp.end;}}
     return {spans,matched:spans.length>0};
   }
   // a pattern normally describes ONE sentence, so prefer alignments that stay
@@ -782,10 +829,11 @@ function bestAlignment(text,lits){
   const sentOf=pos=>{for(let i=0;i<sents.length;i++)if(pos>=sents[i].start&&pos<sents[i].end)return i;return -1;};
   let best=null;
   for(const st of starts){
+    st.li=0;
     const spans=[st];let cursor=st.end;
     for(let i=1;i<lits.length;i++){
       const sp=findAfter(text,lits[i],cursor);
-      if(sp){spans.push(sp);cursor=sp.end;}
+      if(sp){sp.li=i;spans.push(sp);cursor=sp.end;}
     }
     const width=spans[spans.length-1].end-spans[0].start;
     const crossed=new Set(spans.map(s=>sentOf(s.start))).size-1;
@@ -905,7 +953,7 @@ function computeItems(answer,kind,textOverride){
   const text=textOverride!==undefined?textOverride:(answer.fullText||'');
   const src=kind==='pattern'?(answer.patterns||[]):(answer.phrases||[]);
   return src.map(it=>{
-    const r=kind==='pattern'?matchPattern(text,it.en):{spans:findAll(text,it.en)};
+    const r=kind==='pattern'?matchPattern(text,it.en,it.zh):{spans:findAll(text,it.en)};
     return {en:it.en,zh:it.zh||'',spans:r.spans};
   });
 }
@@ -1077,11 +1125,15 @@ function renderMasked(text,items,cuts,fav,ipa,others){
   items.forEach((it,idx)=>it.spans.forEach(sp=>{
     for(let i=sp.start;i<sp.end&&i<text.length;i++) if(owner[i]===-1) owner[i]=idx;
   }));
-  let ownerOther=null;
+  // the hidden side is indexed per SPAN, not per item, so a pattern split into
+  // clauses can label each of its gaps with its own half of the Chinese
+  let ownerOther=null,otherZh=null;
   if(others&&others.length){
     ownerOther=new Int16Array(text.length).fill(-1);
-    others.forEach((it,idx)=>it.spans.forEach(sp=>{
-      for(let i=sp.start;i<sp.end&&i<text.length;i++) if(ownerOther[i]===-1) ownerOther[i]=idx;
+    otherZh=[];
+    others.forEach(it=>it.spans.forEach(sp=>{
+      const zi=otherZh.length;otherZh.push(sp.zh||it.zh||'');
+      for(let i=sp.start;i<sp.end&&i<text.length;i++) if(ownerOther[i]===-1) ownerOther[i]=zi;
     }));
   }
   const paras=[];{
@@ -1116,9 +1168,9 @@ function renderMasked(text,items,cuts,fav,ipa,others){
           }else{
             const w=Math.min(Math.max(core.replace(/\s+/g,' ').length,2),8);
             const blankHtml='<span class="blank" style="--w:'+w+'ch" data-s="'+sIdx+'"><span class="bt">'+wrapIpa(escHtml(core),ipa)+'</span></span>';
-            const ozh=(oo>=0&&others&&others[oo])?(others[oo].zh||''):'';
+            const ozh=(oo>=0&&otherZh)?(otherZh[oo]||''):'';
             // .blank clips overflow, so the tooltip lives on a wrapper
-            seg+=ozh?'<span class="bw" data-zh="'+escAttr(ozh)+'">'+blankHtml+'</span>':blankHtml;
+            seg+=ozh?'<span class="bw" data-s="'+sIdx+'" data-zh="'+escAttr(ozh)+'">'+blankHtml+'</span>':blankHtml;
             st.hasBlank=true;
           }
         }
@@ -1146,7 +1198,7 @@ function renderMasked(text,items,cuts,fav,ipa,others){
         let segHtml=emitRange(gs,ge,s,st);
         const isLastSeg=gi===mySegs.length-1;
         if(isLastSeg&&st.hasBlank)
-          segHtml+='<button class="sbtn" data-s="'+s+'" title="显示/隐藏本句被挖空的内容" aria-label="显示或隐藏本句被挖空的内容"></button>';
+          segHtml+='<button class="sbtn" data-s="'+s+'" data-stage="0" title="点一下看中文，再点看原文，第三下收起" aria-label="本句挖空：中文 / 原文 / 收起"></button>';
         const stext=text.slice(mySegs[gi].start,mySegs[gi].end).trim();
         if(stext.replace(/[^A-Za-z\u00C0-\u017F]/g,'').length>1){
           segHtml+='<button class="abtn" data-t="'+escAttr(stext)+'" title="朗读这一段" aria-label="朗读这一段"></button>';
@@ -1593,12 +1645,14 @@ function renderDailyRowHtml(e){
   const mode=state.pbMode==='phrase'?'phrase':(state.pbMode==='full'?'full':'pattern');
   const parsed=parseCuts(e.fullText||'');
   const text=parsed.text;
-  const pats=(e.patterns||[]).map(it=>({zh:it.zh||'',spans:matchPattern(text,it.en).spans}));
-  const phrs=(e.phrases||[]).map(it=>({zh:it.zh||'',spans:findAll(text,it.en)}));
-  const items=pats.concat(phrs);
+  const pats=(e.patterns||[]).map(it=>({zh:it.zh||'',isPat:true,spans:matchPattern(text,it.en,it.zh).spans}));
+  const phrs=(e.phrases||[]).map(it=>({zh:it.zh||'',isPat:false,spans:findAll(text,it.en)}));
+  // indexed per span so a clause-split pattern labels each gap with its own half
+  const flat=[];
   const owner=new Int16Array(text.length).fill(-1);
-  items.forEach((it,idx)=>it.spans.forEach(sp=>{
-    for(let i=sp.start;i<sp.end&&i<text.length;i++)if(owner[i]===-1)owner[i]=idx;
+  pats.concat(phrs).forEach(it=>it.spans.forEach(sp=>{
+    const fi=flat.length;flat.push({isPat:it.isPat,zh:sp.zh||it.zh||''});
+    for(let i=sp.start;i<sp.end&&i<text.length;i++)if(owner[i]===-1)owner[i]=fi;
   }));
   function emit(rs,re2){
     let out='',i=rs;
@@ -1606,13 +1660,13 @@ function renderDailyRowHtml(e){
       const o=owner[i];let j=i+1;while(j<re2&&owner[j]===o)j++;
       const chunk=text.slice(i,j);
       if(o>=0){
-        const isPat=o<pats.length;
+        const isPat=flat[o].isPat;
         const visible=mode==='full'?true:(mode==='phrase'?!isPat:isPat);
         if(visible){
-          out+='<span class="hl" data-zh="'+escAttr(items[o].zh)+'">'+escHtml(chunk)+'</span>';
+          out+='<span class="hl" data-zh="'+escAttr(flat[o].zh)+'">'+escHtml(chunk)+'</span>';
         }else{
           const w=Math.min(Math.max(chunk.replace(/\s+/g,' ').length,2),8);
-          out+='<span class="hl phw" data-zh="'+escAttr(items[o].zh)+'"><span class="blank" style="--w:'+w+'ch"><span class="bt">'+escHtml(chunk)+'</span></span></span>';
+          out+='<span class="hl phw" data-zh="'+escAttr(flat[o].zh)+'"><span class="blank" style="--w:'+w+'ch"><span class="bt">'+escHtml(chunk)+'</span></span></span>';
         }
       }else{
         out+=spacesToHtml(chunk);
@@ -1824,10 +1878,34 @@ function renderCardView(a,isDaily){
   if(typeof markCached==='function')markCached();
   const card=document.getElementById('practiceCard');
   if(card){
+    /* the per-sentence dot cycles 0 masked -> 1 meanings -> 2 原文 -> 0 */
+    const dotBlanks=s=>card.querySelectorAll('.blank[data-s="'+s+'"]');
+    const dotZh=s=>card.querySelectorAll('.bw[data-s="'+s+'"][data-zh]:not([data-zh=""])');
+    const paintDot=(sb,stage)=>{
+      sb.dataset.stage=String(stage);
+      sb.classList.toggle('zh',stage===1);
+      sb.classList.toggle('on',stage===2);
+    };
+    const setDot=(sb,stage)=>{
+      const s=sb.dataset.s;
+      dotBlanks(s).forEach(b=>b.classList.toggle('revealed',stage===2));
+      // one clause of a pattern usually owns several gaps: label the first of
+      // them and leave the repeats bare, otherwise the line reads twice over
+      const seen=new Set();
+      dotZh(s).forEach(n=>{
+        const k=n.dataset.zh;
+        const first=stage===1&&!seen.has(k);
+        seen.add(k);
+        n.classList.toggle('zh-on',first);
+      });
+      paintDot(sb,stage);
+    };
+    // a blank tapped on its own can complete or break a stage: keep the dot honest
     const syncDot=s=>{
       const sb=card.querySelector('.sbtn[data-s="'+s+'"]');if(!sb)return;
-      const blanks=card.querySelectorAll('.blank[data-s="'+s+'"]');
-      sb.classList.toggle('on',[...blanks].every(b=>b.classList.contains('revealed')));
+      const blanks=[...dotBlanks(s)];
+      const allRev=blanks.length>0&&blanks.every(b=>b.classList.contains('revealed'));
+      paintDot(sb,allRev?2:(card.querySelector('.bw.zh-on[data-s="'+s+'"]')?1:0));
     };
     card.addEventListener('click',e=>{
       const ab=e.target.closest('.abtn');
@@ -1842,11 +1920,10 @@ function renderCardView(a,isDaily){
       }
       const sb=e.target.closest('.sbtn');
       if(sb){
-        const s=sb.dataset.s;
-        const blanks=card.querySelectorAll('.blank[data-s="'+s+'"]');
-        const allRev=[...blanks].every(b=>b.classList.contains('revealed'));
-        blanks.forEach(b=>b.classList.toggle('revealed',!allRev));
-        sb.classList.toggle('on',!allRev);
+        const cur=+(sb.dataset.stage||0);
+        // nothing in this sentence carries a meaning: skip straight to 原文
+        const hasZh=dotZh(sb.dataset.s).length>0;
+        setDot(sb,cur===0?(hasZh?1:2):(cur===1?2:0));
         return;
       }
       // tap = hover on touch devices; phonetics take priority over the
