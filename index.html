@@ -306,6 +306,11 @@
   .abtn.busy::before{content:"◌";animation:spin 1s linear infinite;display:inline-block;}
   .abtn.playing{color:var(--pat-ink);}
   .abtn.playing::before{content:"❙❙";font-size:.85em;}
+  /* whole-paragraph clip: sits at the head of the paragraph, one size up so it
+     reads as a different unit from the per-segment ♪ that follow it */
+  .pbtn{font-size:.95em;margin:0 5px 0 0;padding:1px 5px;}
+  .pbtn::before{content:"♫";}
+  .pbtn.playing::before{content:"❙❙";font-size:.8em;}
   @keyframes spin{to{transform:rotate(360deg);}}
 
   .player{position:sticky;bottom:0;display:flex;align-items:center;gap:10px;
@@ -1045,7 +1050,12 @@ function renderFull(text,cuts,fav,ipa,trans){
       const tr=trans&&trans.get(segKey(text.slice(sents[s].start,sents[s].end)));
       out+=tr?'<span class="sent" data-tr="'+escAttr(tr)+'">'+sentHtml+'</span>':sentHtml;
     }
-    html+='<p>'+out+'</p>';
+    // paragraphs come straight from the blank lines in the text, so re-splitting
+    // the source re-cuts the buttons on the next render with no extra state
+    const ptext=text.slice(ps,pe).trim();
+    const phead=ptext.replace(/[^A-Za-z\u00C0-\u017F]/g,'').length>1
+      ?'<button class="abtn pbtn" data-t="'+escAttr(ptext)+'" title="朗读整段" aria-label="朗读整段"></button>':'';
+    html+='<p>'+phead+out+'</p>';
   }
   return html;
 }
@@ -2364,6 +2374,8 @@ function clipKey(text,cfg){return hash(text)+'_'+cfg.model+'_'+cfg.voice;}
 
 /* ---- generation ---- */
 async function fetchTTS(text,cfg){
+  // the endpoint caps input length; say so plainly instead of surfacing a 400
+  if(text.length>4000)throw new Error('这段太长了（'+text.length+' 个字符，上限 4000）。在全文里把它用空行拆成两段就可以了。');
   const key=getKey();
   if(!key)throw new Error('还没有填写 API Key，请点右上角 ⚙ 设置。');
   const body={model:cfg.model,input:text,voice:cfg.voice,response_format:'mp3'};
@@ -2386,7 +2398,7 @@ async function fetchTTS(text,cfg){
 
 /* ---- player ---- */
 const audio=new Audio();
-let curUrl=null,curKey=null,curBtn=null,seeking=false,lastText=null,loopStart=0,loopLeft=0;
+let curUrl=null,curKey=null,curBtn=null,seeking=false,lastText=null,lastPara=false,loopStart=0,loopLeft=0;
 const $=id=>document.getElementById(id);
 function fmt(t){if(!isFinite(t))return '0:00';const m=Math.floor(t/60),s=Math.floor(t%60);return m+':'+String(s).padStart(2,'0');}
 function updTime(){
@@ -2435,14 +2447,25 @@ $('pSeek').addEventListener('change',()=>{
 $('pClose').onclick=()=>{loopStart=0;loopLeft=0;audio.pause();$('player').hidden=true;document.body.classList.remove('player-on');if(curBtn)curBtn.classList.remove('playing');};
 $('pRegen').onclick=()=>{const b=currentAudioBtn();if(b)playSentence(b,true);};
 // prev / next walk the audio segments in reading order; missing clips are generated on the fly
-function allAudioBtns(){return [...mainInner.querySelectorAll('.abtn')];}
+// paragraph clips and segment clips are two separate reading orders: stepping
+// from a paragraph lands on the next paragraph, never on a segment inside it
+function isPara(b){return !!(b&&b.classList&&b.classList.contains('pbtn'));}
+function allAudioBtns(like){
+  const all=[...mainInner.querySelectorAll('.abtn')];
+  return like===undefined?all:all.filter(b=>isPara(b)===isPara(like));
+}
 function currentAudioBtn(){
   if(curBtn&&curBtn.isConnected)return curBtn;
   if(lastText==null)return null;
-  return allAudioBtns().find(b=>b.dataset.t===lastText)||null; // mode switch rebuilt the DOM: relocate by text
+  // mode switch rebuilt the DOM: relocate by text, preferring the same kind so a
+  // one-sentence paragraph doesn't hand the segment's place to the paragraph button
+  const all=allAudioBtns();
+  return all.find(b=>b.dataset.t===lastText&&isPara(b)===lastPara)
+      ||all.find(b=>b.dataset.t===lastText)||null;
 }
 function toggleFavCurrent(){
   const b=currentAudioBtn();if(!b)return;
+  if(isPara(b))return;      // a paragraph is not a favouritable unit; 收藏 is per segment
   const all=[...mainInner.querySelectorAll('.abtn,.fstar')];
   const i=all.indexOf(b);
   if(i>=0){
@@ -2455,8 +2478,9 @@ function toggleFavCurrent(){
   if(ps)ps.click();
 }
 function stepAudio(dir){
-  const list=allAudioBtns();if(!list.length)return;
   const cur=currentAudioBtn();
+  const list=allAudioBtns(cur||undefined).filter(b=>cur?true:!isPara(b));
+  if(!list.length)return;
   const idx=cur?list.indexOf(cur):-1;
   let target;
   if(idx<0)target=dir>0?list[0]:list[list.length-1];
@@ -2504,7 +2528,7 @@ function loadBlob(blob,label){
 }
 async function playSentence(btn,force){
   const text=btn.dataset.t,cfg=getCfg(),k=clipKey(text,cfg);
-  lastText=text;
+  lastText=text;lastPara=isPara(btn);
   // same clip already loaded: just toggle
   if(!force&&curKey===k&&audio.src){ if(audio.paused)audio.play().catch(()=>{}); else audio.pause(); return; }
   if(curBtn&&curBtn!==btn)curBtn.classList.remove('playing');
