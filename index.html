@@ -103,7 +103,6 @@
   .ghead .gcount{font-family:var(--mono);font-size:calc(11px * var(--fs));}
   .gsum{font-family:var(--mono);font-size:calc(11px * var(--fs));color:var(--muted);}
   .daily-zone .qitem-meta{margin-top:4px;justify-content:flex-end;}
-  .pb-cnt{margin-left:0;margin-top:2px;flex:0 0 auto;}
   .ghead .gbtn{border:none;background:none;color:var(--faint);font-size:calc(12px * var(--fs));padding:1px 5px;border-radius:5px;visibility:hidden;cursor:pointer;}
   .ghead:hover .gbtn{visibility:visible;}
   .ghead .gbtn:hover{color:var(--ink);background:var(--hover);}
@@ -369,11 +368,21 @@
   .pstar.on::before{content:"★";}
   .pstar:hover{color:var(--ink);}
   .pstar.on{color:var(--pat-ink);}
-  .pb-main{flex:1;min-width:0;}
+  /* two columns, original left and meaning right; auto-fit drops to one column
+     on a narrow screen instead of squeezing both. Nothing is ever truncated:
+     long sentences wrap inside their own column. */
+  .pb-main{flex:1;min-width:0;display:grid;gap:2px 20px;
+           grid-template-columns:repeat(auto-fit,minmax(16em,1fr));align-items:start;}
+  .pb-main.pb-solo{grid-template-columns:1fr;}
   .pb-en{font-family:var(--serif);font-size:calc(17.5px * var(--fs));line-height:1.9;cursor:pointer;overflow-wrap:break-word;}
-  .pb-en .hl.phw{text-decoration:none;}
+  /* masked: the words keep their space so revealing shifts nothing, and
+     visibility survives forced-colors the way a colour trick would not */
+  .pb-en.masked .pbt{border-bottom:1.7px solid var(--faint);}
+  .pb-en.masked .pbt .bt{visibility:hidden;}
+  .pb-main:hover .pb-en.masked .pbt{border-bottom-color:var(--ink);}
   .pb-add textarea{flex:1.2;min-width:170px;resize:vertical;font-size:calc(13px * var(--fs));line-height:1.4;}
-  .pb-zh{font-family:var(--sans);font-size:calc(13px * var(--fs));color:var(--muted);margin-top:4px;line-height:1.55;}
+  .pb-zh{font-family:var(--sans);font-size:calc(14.5px * var(--fs));color:var(--ink);line-height:1.75;
+         overflow-wrap:break-word;padding-top:calc(2px * var(--fs));}
   .pb-act{border:none;background:none;color:var(--faint);cursor:pointer;font-size:calc(13px * var(--fs));
           padding:3px 6px;border-radius:6px;margin-top:3px;flex:0 0 auto;}
   .pb-act:hover{color:var(--ink);background:var(--hover);}
@@ -860,7 +869,7 @@ function bestAlignment(text,lits){
    ============================================================ */
 const LS_KEY='interview_practice_v1';
 const DEF_TITLE='流畅表达任何事';
-let state={answers:[],selectedId:null,mode:'full',showZh:false,revealAll:false,revealZh:false,openGroup:null,pbShowZh:false,pbFavOnly:false,pbMode:'pattern',daily:[],dailyOpen:null,appTitle:DEF_TITLE,favOnlySent:false,groupOrder:[],groups:[],folders:[],groupFolder:{},openFolder:null};
+let state={answers:[],selectedId:null,mode:'full',showZh:false,revealAll:false,revealZh:false,pbRevealAll:false,openGroup:null,pbShowZh:false,pbFavOnly:false,pbMode:'pattern',daily:[],dailyOpen:null,appTitle:DEF_TITLE,favOnlySent:false,groupOrder:[],groups:[],folders:[],groupFolder:{},openFolder:null};
 
 function uid(){return 'a'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
 
@@ -1656,53 +1665,27 @@ function deleteDaily(id,skip){
   save();renderAll();
 }
 function renderDailyRowHtml(e){
-  // full text, wrapped; board-wide mode decides which side is blanked:
-  // pattern mode blanks the phrases, phrase mode blanks the patterns;
-  // one ♪ per TTS segment, same segmentation rules as cards (incl. " / ")
-  const mode=state.pbMode==='phrase'?'phrase':(state.pbMode==='full'?'full':'pattern');
+  // The whole sentence is the unit now: no pattern/phrase masking, no modes.
+  // Text is still cut into TTS segments so every ♪ lines up with the card's
+  // segmentation (including " / " manual cuts); each piece is wrapped so the
+  // row can hide or show all of them at once.
   const parsed=parseCuts(e.fullText||'');
   const text=parsed.text;
-  const pats=(e.patterns||[]).map(it=>({zh:it.zh||'',isPat:true,spans:matchPattern(text,it.en,it.zh).spans}));
-  const phrs=(e.phrases||[]).map(it=>({zh:it.zh||'',isPat:false,spans:findAll(text,it.en)}));
-  // indexed per span so a clause-split pattern labels each gap with its own half
-  const flat=[];
-  const owner=new Int16Array(text.length).fill(-1);
-  pats.concat(phrs).forEach(it=>it.spans.forEach(sp=>{
-    const fi=flat.length;flat.push({isPat:it.isPat,zh:sp.zh||it.zh||''});
-    for(let i=sp.start;i<sp.end&&i<text.length;i++)if(owner[i]===-1)owner[i]=fi;
-  }));
-  function emit(rs,re2){
-    let out='',i=rs;
-    while(i<re2){
-      const o=owner[i];let j=i+1;while(j<re2&&owner[j]===o)j++;
-      const chunk=text.slice(i,j);
-      if(o>=0){
-        const isPat=flat[o].isPat;
-        const visible=mode==='full'?true:(mode==='phrase'?!isPat:isPat);
-        if(visible){
-          out+='<span class="hl" data-zh="'+escAttr(flat[o].zh)+'">'+escHtml(chunk)+'</span>';
-        }else{
-          const w=Math.min(Math.max(chunk.replace(/\s+/g,' ').length,2),8);
-          out+='<span class="hl phw" data-zh="'+escAttr(flat[o].zh)+'"><span class="blank" style="--w:'+w+'ch"><span class="bt">'+escHtml(chunk)+'</span></span></span>';
-        }
-      }else{
-        out+=spacesToHtml(chunk);
-      }
-      i=j;
-    }
-    return out;
-  }
+  const piece=(a,b)=>{
+    const t=text.slice(a,b);
+    return t?'<span class="pbt"><span class="bt">'+spacesToHtml(t)+'</span></span>':'';
+  };
   const segs=ttsSegments(text,parsed.cuts);
   let html='',cursor=0;
   for(const g of segs){
-    if(g.start>cursor)html+=emit(cursor,g.start);
-    html+=emit(Math.max(g.start,cursor),g.end);
+    if(g.start>cursor)html+=piece(cursor,g.start);
+    html+=piece(Math.max(g.start,cursor),g.end);
     const stext=text.slice(g.start,g.end).trim();
     if(stext.replace(/[^A-Za-z\u00C0-\u017F]/g,'').length>1)
       html+='<button class="abtn" data-t="'+escAttr(stext)+'" title="朗读这一段" aria-label="朗读这一段"></button>';
     cursor=Math.max(cursor,g.end);
   }
-  if(cursor<text.length)html+=emit(cursor,text.length);
+  if(cursor<text.length)html+=piece(cursor,text.length);
   return html;
 }
 function moveDaily(srcId,targetId,after){
@@ -1720,16 +1703,14 @@ function renderDailyBoard(){
   const shown=base.filter(e=>e.fav).concat(base.filter(e=>!e.fav));
   let itemsHtml='';
   for(const e of shown){
+    const zh=(e.zh||'').trim();
     itemsHtml+='<div class="card pb-item" data-id="'+e.id+'">'
       +'<button class="pb-drag" title="拖动排序" aria-label="拖动排序">⠿</button>'
       +'<button class="pstar'+(e.fav?' on':'')+'" aria-label="收藏这条"></button>'
-      +'<div class="pb-main"><div class="pb-en">'+renderDailyRowHtml(e)+'</div>'
-      +(e.zh?'<div class="pb-zh"'+(state.pbShowZh?'':' hidden')+'>'+escHtml(e.zh)+'</div>':'')
+      +'<div class="pb-main'+(zh?'':' pb-solo')+'">'
+      +'<div class="pb-en'+(state.pbRevealAll?'':' masked')+'">'+renderDailyRowHtml(e)+'</div>'
+      +(zh?'<div class="pb-zh">'+spacesToHtml(zh)+'</div>':'')
       +'</div>'
-      +'<span class="cnt pb-cnt">'
-      +'<button data-d="-1" aria-label="减少复习次数">−</button>'
-      +'<span class="cnt-n">'+(e.reviews||0)+'</span>'
-      +'<button data-d="1" aria-label="增加复习次数">+</button></span>'
       +'<button class="pb-act pb-open" title="打开完整练习页">›</button>'
       +'<button class="pb-act pb-edit" title="编辑这条">✎</button>'
       +'<button class="pb-act pb-del" title="删除这条">✕</button>'
@@ -1738,29 +1719,23 @@ function renderDailyBoard(){
   if(!shown.length)itemsHtml='<div class="pb-empty">'+(state.pbFavOnly?'还没有收藏的内容。':'还没有内容，用下面的输入框添加第一条。')+'</div>';
   mainInner.innerHTML='<h1 class="ans-title">日常用语</h1>'
     +'<div class="controls">'
-    +'<div class="seg">'
-    +'<button data-m="full" class="'+(state.pbMode==='full'?'on':'')+'">全文</button>'
-    +'<button data-m="pattern" class="'+(state.pbMode!=='phrase'&&state.pbMode!=='full'?'on':'')+'">句型</button>'
-    +'<button data-m="phrase" class="'+(state.pbMode==='phrase'?'on':'')+'">短语</button>'
-    +'</div>'
     +'<div class="aux">'
     +'<button class="toggle'+(state.pbFavOnly?' on':'')+'" id="pbFav">只看收藏</button>'
-    +'<button class="toggle'+(state.pbShowZh?' on':'')+'" id="pbZh">显示中文</button>'
+    +'<button class="toggle'+(state.pbRevealAll?' on':'')+'" id="pbReveal">显示全部原文</button>'
     +'</div></div>'
     +'<div id="pbList">'+itemsHtml+'</div>'
     +'<div class="card pb-add-card"><div class="pb-add">'
-    +'<input class="f" id="pbEn" placeholder="英语内容">'
-    +'<textarea class="f" id="pbPP" rows="2" placeholder="粘贴 句型 / 短语 列表（可留空，自动识别）"></textarea>'
+    +'<input class="f" id="pbEn" placeholder="原文">'
+    +'<input class="f" id="pbZhIn" placeholder="中文翻译">'
+    +'<textarea class="f" id="pbPP" rows="2" placeholder="粘贴 句型 / 短语 列表（可留空，仅用于完整练习页）"></textarea>'
     +'<button class="btn primary" id="pbAdd">添加</button>'
     +'</div></div>'
-    +'<p class="pb-hint">全文不挖空，句型模式挖短语，短语模式挖句型；点空白显示，悬停看中文；每个 ♪ 朗读一段（分段规则与卡片一致，含 " / " 手动切分）；拖 ⠿ 排序，› 打开完整练习页。粘贴框支持「句型/短语」自动识别，Ctrl+回车添加。</p>';
-  mainInner.querySelectorAll('.controls .seg button').forEach(b=>{
-    b.onclick=()=>{state.pbMode=b.dataset.m;save();renderMain();};
-  });
+    +'<p class="pb-hint">左边原文默认挖空，右边中文一直显示；点一下显示原文，再点收起。每个 ♪ 朗读一段（分段规则与卡片一致，含 " / " 手动切分）；拖 ⠿ 排序，› 打开完整练习页。粘贴框支持「句型/短语」自动识别，Ctrl+回车添加。</p>';
   document.getElementById('pbFav').onclick=()=>{state.pbFavOnly=!state.pbFavOnly;save();renderMain();};
-  document.getElementById('pbZh').onclick=()=>{state.pbShowZh=!state.pbShowZh;save();renderMain();};
+  document.getElementById('pbReveal').onclick=()=>{state.pbRevealAll=!state.pbRevealAll;renderMain();};
   const addRow=()=>{
     const en=document.getElementById('pbEn').value.trim();
+    const zh=document.getElementById('pbZhIn').value.trim();
     const raw=document.getElementById('pbPP').value;
     if(!en)return;
     let patterns=[],phrases=[];
@@ -1770,38 +1745,29 @@ function renderDailyBoard(){
       phrases=textToItems(r.phrases.join('\n'));
       if(!patterns.length&&!phrases.length)phrases=textToItems(raw);
     }
-    state.daily.push({id:uid(),fullText:en,zh:'',patterns,phrases,fav:false});
+    state.daily.push({id:uid(),fullText:en,zh:zh,patterns,phrases,fav:false});
     save();renderAll();
     setTimeout(()=>{const el=document.getElementById('pbEn');if(el)el.focus();},30);
   };
   document.getElementById('pbAdd').onclick=addRow;
-  document.getElementById('pbEn').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();document.getElementById('pbPP').focus();}});
+  document.getElementById('pbEn').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();document.getElementById('pbZhIn').focus();}});
+  document.getElementById('pbZhIn').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();addRow();}});
   document.getElementById('pbPP').addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();addRow();}});
   const listEl=document.getElementById('pbList');
-  const clearMarks=()=>listEl.querySelectorAll('.drop-above,.drop-below').forEach(n=>n.classList.remove('drop-above','drop-below'));
   listEl.addEventListener('click',e=>{
     if(e.target.closest('.abtn'))return;   // shared audio listener handles playback
     const row=e.target.closest('.pb-item');if(!row)return;
     const id=row.dataset.id;
     const entry=state.daily.find(x=>x.id===id);if(!entry)return;
     if(e.target.closest('.pb-drag'))return;
-    const cb=e.target.closest('.pb-cnt button');
-    if(cb){
-      entry.reviews=Math.max(0,(entry.reviews||0)+parseInt(cb.dataset.d,10));
-      row.querySelector('.cnt-n').textContent=entry.reviews;   // update in place, keep scroll
-      save();return;
-    }
     if(e.target.closest('.pstar')){entry.fav=!entry.fav;save();renderMain();return;}
     if(e.target.closest('.pb-open')){state.dailyOpen=id;save();renderMain();return;}
     if(e.target.closest('.pb-edit')){openDailyEditor(id);return;}
     if(e.target.closest('.pb-del')){deleteDaily(id);return;}
-    const bl=e.target.closest('.blank');
-    if(bl){bl.classList.toggle('revealed');return;}
-    const hl=e.target.closest('.hl');
-    if(hl){if(!hl.classList.contains('phw'))hl.classList.toggle('pinned');return;}
-    if(e.target.closest('.pb-en')&&!state.pbShowZh){
-      const zhEl=row.querySelector('.pb-zh');
-      if(zhEl)zhEl.hidden=!zhEl.hidden;
+    // anywhere in the pair, including the Chinese, flips the original
+    if(e.target.closest('.pb-main')){
+      const en=row.querySelector('.pb-en');
+      if(en)en.classList.toggle('masked');
     }
   });
   // drag to reorder: whole row, pointer-based so touch works too
@@ -1813,6 +1779,9 @@ function renderDailyBoard(){
     });
   });
   if(typeof markCached==='function')markCached();
+}
+
+function renderMain(){  if(typeof markCached==='function')markCached();
 }
 
 function renderMain(){
