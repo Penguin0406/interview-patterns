@@ -697,6 +697,20 @@
         <div class="desc">全文界面会把它放在正文上方，用来看着关键词回忆内容。怎么写都行，换行会保留。</div>
         <textarea class="f" id="fCue" rows="3" placeholder="niche SaaS → GTM → outbound → data"></textarea>
       </div>
+      <div class="field" id="fullField">
+        <label>回答全文</label>
+        <div class="desc">段落之间空一行。想手动切分发音段，在切点处打一个前后带空格的 " / "（显示时自动隐藏，只影响朗读分段）。</div>
+        <textarea class="f" id="fFull" rows="8" placeholder="粘贴完整回答。段落之间空一行即可。"></textarea>
+      </div>
+      <div class="field" id="dailyTextField" style="display:none">
+        <label>内容</label>
+        <div class="desc">一句话或一段话都可以。想手动切分发音段，在切点处打一个前后带空格的 " / "（显示时自动隐藏）。</div>
+        <textarea class="f" id="fDailyText" rows="4"></textarea>
+      </div>
+      <div class="field" id="dailyZhField" style="display:none">
+        <label>中文</label>
+        <input class="f" id="fDailyZh" placeholder="可留空">
+      </div>
       <div class="field" id="transField">
         <label>翻译</label>
         <div class="desc">整段粘贴即可，无需换行。按句末标点（. ! ? 。！？）断句，与全文第 N 句一一对应。全文界面悬停句子即可看到。</div>
@@ -712,15 +726,6 @@
         <input class="f" id="fGroup" list="groupList" placeholder="例：实习总体介绍">
         <datalist id="groupList"></datalist>
       </div>
-      <div class="field" id="dailyTextField" style="display:none">
-        <label>内容</label>
-        <div class="desc">一句话或一段话都可以。想手动切分发音段，在切点处打一个前后带空格的 " / "（显示时自动隐藏）。</div>
-        <textarea class="f" id="fDailyText" rows="4"></textarea>
-      </div>
-      <div class="field" id="dailyZhField" style="display:none">
-        <label>中文</label>
-        <input class="f" id="fDailyZh" placeholder="可留空">
-      </div>
       <div class="field" id="ipaField">
         <label>音标</label>
         <div class="desc">每行一个，格式：word = 音标。不影响句型短语的匹配与切分，悬停单词即可看到。</div>
@@ -735,11 +740,6 @@
         <label>短语（每行一个）</label>
         <div class="desc">格式：<code>English (中文)</code>。中文可留空。</div>
         <textarea class="f" id="fPhrases" rows="6" placeholder="go-to-market motion (市场进入打法)"></textarea>
-      </div>
-      <div class="field" id="fullField">
-        <label>回答全文</label>
-        <div class="desc">段落之间空一行。想手动切分发音段，在切点处打一个前后带空格的 " / "（显示时自动隐藏，只影响朗读分段）。</div>
-        <textarea class="f" id="fFull" rows="8" placeholder="粘贴完整回答。段落之间空一行即可。"></textarea>
       </div>
     </div>
     <div class="modal-foot">
