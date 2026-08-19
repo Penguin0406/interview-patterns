@@ -294,6 +294,14 @@
   .footnote b{color:var(--ink);font-weight:500;}
 
 
+  /* keyword cues: sits above the text in 全文 mode, read them and recall the rest */
+  .cuebox{margin:0 0 20px;padding:11px 14px;border-radius:10px;
+          background:var(--chip);border:1px solid var(--line);
+          font-family:var(--sans);font-size:calc(13.5px * var(--fs));line-height:1.85;
+          color:var(--ink);overflow-wrap:break-word;}
+  .cuebox .cue-lab{display:block;font-size:calc(10.5px * var(--fs));letter-spacing:.09em;
+                   color:var(--muted);margin-bottom:3px;}
+
   /* ---------- audio ---------- */
   .abtn{border:none;background:none;cursor:pointer;font-family:var(--sans);
         color:var(--faint);padding:0 4px;margin-left:1px;font-size:.78em;
@@ -684,6 +692,16 @@
         </div>
       </details>
 
+      <div class="field" id="cueField">
+        <label>关键词提示</label>
+        <div class="desc">全文界面会把它放在正文上方，用来看着关键词回忆内容。怎么写都行，换行会保留。</div>
+        <textarea class="f" id="fCue" rows="3" placeholder="niche SaaS → GTM → outbound → data"></textarea>
+      </div>
+      <div class="field" id="transField">
+        <label>翻译</label>
+        <div class="desc">整段粘贴即可，无需换行。按句末标点（. ! ? 。！？）断句，与全文第 N 句一一对应。全文界面悬停句子即可看到。</div>
+        <textarea class="f" id="fTrans" rows="5"></textarea>
+      </div>
       <div class="field" id="titleField">
         <label>标题</label>
         <input class="f" id="fTitle" placeholder="例：Sonio GTM 介绍">
@@ -702,11 +720,6 @@
       <div class="field" id="dailyZhField" style="display:none">
         <label>中文</label>
         <input class="f" id="fDailyZh" placeholder="可留空">
-      </div>
-      <div class="field" id="transField">
-        <label>翻译</label>
-        <div class="desc">整段粘贴即可，无需换行。按句末标点（. ! ? 。！？）断句，与全文第 N 句一一对应。全文界面悬停句子即可看到。</div>
-        <textarea class="f" id="fTrans" rows="5"></textarea>
       </div>
       <div class="field" id="ipaField">
         <label>音标</label>
@@ -1811,6 +1824,8 @@ function renderCardView(a,isDaily){
   let bodyHtml,footHtml='';
   if(mode==='full'){
     bodyHtml=renderFull(parsed.text,parsed.cuts,favInfo,ipaMap,transMap);
+    const cue=(a.cueText||'').trim();
+    if(cue)bodyHtml='<div class="cuebox"><span class="cue-lab">关键词</span>'+spacesToHtml(cue)+'</div>'+bodyHtml;
   }else{
     const kind=mode==='pattern'?'pattern':'phrase';
     const items=computeItems(a,kind,parsed.text);
@@ -1962,6 +1977,7 @@ window.openEditor=function(id,presetGroup){
   // created from a group header: the group is already decided
   document.getElementById('groupField').style.display=(!a&&presetGroup)?'none':'';
   document.getElementById('groupList').innerHTML=allGroups().map(g=>'<option value="'+escAttr(g)+'">').join('');
+  document.getElementById('fCue').value=a?(a.cueText||''):'';
   document.getElementById('fTrans').value=a?(a.transText||''):'';
   document.getElementById('fIpa').value=a?(a.ipaText||''):'';
   document.getElementById('fPatterns').value=a?itemsToText(a.patterns):'';
@@ -1975,7 +1991,7 @@ window.openEditor=function(id,presetGroup){
   document.getElementById('deleteBtn').style.display=a?'inline-block':'none';
   const q=document.querySelector('details.quick'); if(q)q.open=!id;
   overlay.classList.add('show');
-  setTimeout(()=>document.getElementById(id?'fTitle':'pasteBox').focus(),40);
+  setTimeout(()=>document.getElementById(id?'fCue':'pasteBox').focus(),40);
 };
 function closeEditor(){overlay.classList.remove('show');editingId=null;editingDailyId=null;}
 function openDailyEditor(id){
@@ -1984,6 +2000,7 @@ function openDailyEditor(id){
   document.getElementById('modalTitle').textContent=e?'编辑日常用语':'新建日常用语';
   document.getElementById('fDailyText').value=e?(e.fullText||''):'';
   document.getElementById('fDailyZh').value=e?(e.zh||''):'';
+  document.getElementById('fCue').value=e?(e.cueText||''):'';
   document.getElementById('fTrans').value=e?(e.transText||''):'';
   document.getElementById('fIpa').value=e?(e.ipaText||''):'';
   document.getElementById('fPatterns').value=e?itemsToText(e.patterns||[]):'';
@@ -2019,11 +2036,12 @@ document.getElementById('saveBtn').onclick=()=>{
     if(!ftxt){closeEditor();return;}
     const dtr=document.getElementById('fTrans').value.trim();
     const dip=document.getElementById('fIpa').value.trim();
+    const dcue=document.getElementById('fCue').value.replace(/\r\n/g,'\n').trim();
     if(editingDailyId){
       const e=state.daily.find(x=>x.id===editingDailyId);
-      if(e){e.fullText=ftxt;e.zh=dzh;e.patterns=dpat;e.phrases=dphr;e.transText=dtr;e.ipaText=dip;}
+      if(e){e.fullText=ftxt;e.zh=dzh;e.patterns=dpat;e.phrases=dphr;e.transText=dtr;e.ipaText=dip;e.cueText=dcue;}
     }else{
-      state.daily.push({id:uid(),fullText:ftxt,zh:dzh,patterns:dpat,phrases:dphr,transText:dtr,ipaText:dip,fav:false});
+      state.daily.push({id:uid(),fullText:ftxt,zh:dzh,patterns:dpat,phrases:dphr,transText:dtr,ipaText:dip,cueText:dcue,fav:false});
       state.selectedId='__daily__';state.dailyOpen=null;
     }
     save();closeEditor();renderAll();
@@ -2035,12 +2053,13 @@ document.getElementById('saveBtn').onclick=()=>{
   if(!title&&!fullText){closeEditor();return;}
   const transText=document.getElementById('fTrans').value.trim();
   const ipaText=document.getElementById('fIpa').value.trim();
+  const cueText=document.getElementById('fCue').value.replace(/\r\n/g,'\n').trim();
   if(editingId){
     const a=state.answers.find(x=>x.id===editingId);
     a.title=title;a.group=group;a.patterns=patterns;a.phrases=phrases;a.fullText=fullText;
-    a.transText=transText;a.ipaText=ipaText;
+    a.transText=transText;a.ipaText=ipaText;a.cueText=cueText;
   }else{
-    const na={id:uid(),title:title||'（未命名）',group,patterns,phrases,fullText,transText,ipaText};
+    const na={id:uid(),title:title||'（未命名）',group,patterns,phrases,fullText,transText,ipaText,cueText};
     state.answers.push(na);state.selectedId=na.id;
   }
   if(group&&state.groups.indexOf(group)<0)state.groups.push(group);
@@ -2144,6 +2163,7 @@ function packEntry(x){
     fullText:x.fullText||'',
     transText:x.transText||'',
     ipaText:x.ipaText||'',
+    cueText:x.cueText||'',
     sentFavs:Array.isArray(x.sentFavs)?x.sentFavs:[],
     reviews:Number(x.reviews)||0
   });
