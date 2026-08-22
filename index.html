@@ -294,6 +294,32 @@
   .footnote b{color:var(--ink);font-weight:500;}
 
 
+  /* ---------- 抽背 ---------- */
+  /* the sidebar folds into a top bar so the question owns the screen; same shape
+     the layout already takes on a narrow viewport */
+  body.quiz-mode .app{grid-template-columns:1fr;grid-template-rows:auto 1fr;height:auto;min-height:100vh;}
+  body.quiz-mode .side{border-right:none;border-bottom:1px solid var(--line);}
+  body.quiz-mode .side-tools,body.quiz-mode .qlist{display:none;}
+  /* the top bar now runs the full width: keep its right edge clear of the
+     stopwatch, which floats at the top right */
+  body.quiz-mode .side-head{padding-right:calc(64px * var(--fs));}
+  body.quiz-mode #listToggle{display:none;}
+  .quiz-scope{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:18px;}
+  .quiz-scope .chip{border:1px solid var(--line-strong);background:var(--card);color:var(--muted);
+    border-radius:20px;padding:5px 13px;font-family:var(--sans);font-size:calc(12.5px * var(--fs));
+    line-height:1.3;cursor:pointer;transition:all .14s;}
+  .quiz-scope .chip:hover{border-color:var(--faint);color:var(--ink);}
+  .quiz-scope .chip.on{background:var(--ink);border-color:var(--ink);color:var(--on-ink-fg);}
+  .quiz-meta{font-family:var(--mono);font-size:calc(11.5px * var(--fs));color:var(--muted);
+    letter-spacing:.06em;margin-bottom:10px;}
+  .quiz-q{font-family:var(--serif);font-weight:600;font-size:calc(30px * var(--fs));
+    line-height:1.35;margin:0 0 24px;overflow-wrap:break-word;}
+  .quiz-note{font-family:var(--sans);font-size:calc(15px * var(--fs));line-height:1.85;
+    color:var(--muted);margin:0 0 24px;}
+  .quiz-acts{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:24px;}
+  .quiz-acts .btn[disabled]{opacity:.38;cursor:default;}
+  .quiz-acts .btn[disabled]:hover{border-color:var(--line-strong);}
+
   /* keyword cues: sits above the text in 全文 mode, read them and recall the rest */
   .cuebox{margin:0 0 20px;padding:11px 14px;border-radius:10px;
           background:var(--chip);border:1px solid var(--line);
@@ -572,6 +598,7 @@
         </span>
         <button class="btn ghost" id="ttsBtn" title="发音设置" aria-label="发音设置">⚙</button>
         <button class="btn ghost" id="themeToggle" title="切换浅色/深色" aria-label="切换浅色或深色模式">◐</button>
+        <button class="btn ghost" id="viewToggle" title="在抽背和卡片库之间切换">卡片库</button>
         <button class="btn ghost" id="listToggle" aria-expanded="false">卡片列表 <span class="lt-chev">⌄</span></button>
       </div>
     </div>
@@ -882,9 +909,305 @@ function bestAlignment(text,lits){
    ============================================================ */
 const LS_KEY='interview_practice_v1';
 const DEF_TITLE='流畅表达任何事';
-let state={answers:[],selectedId:null,mode:'full',showZh:false,revealAll:false,revealZh:false,pbRevealAll:false,openGroup:null,pbShowZh:false,pbFavOnly:false,pbMode:'pattern',daily:[],dailyOpen:null,appTitle:DEF_TITLE,favOnlySent:false,groupOrder:[],groups:[],folders:[],groupFolder:{},openFolder:null};
+let state={answers:[],selectedId:null,view:'quiz',quiz:null,builtinGone:[],builtinRegroup:0,mode:'full',showZh:false,revealAll:false,revealZh:false,pbRevealAll:false,openGroup:null,pbShowZh:false,pbFavOnly:false,pbMode:'pattern',daily:[],dailyOpen:null,appTitle:DEF_TITLE,favOnlySent:false,groupOrder:[],groups:[],folders:[],groupFolder:{},openFolder:null};
+// 抽背进度：done / round 按资源库（已选分组的组合）分开记
+function blankQuiz(){return {scope:[],done:{},round:{},cur:null,stage:0};}
+state.quiz=blankQuiz();
 
 function uid(){return 'a'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
+
+/* ============================================================
+   内置题库 BUILTIN_CARDS
+   把整理好的题目替换进这个数组即可，其余代码不用动。
+   每条：{ id, title, group, cueText, fullText, transText, ipaText,
+             patterns:[{en,zh}], phrases:[{en,zh}] }
+   除 id 和 title 外都可以省略。id 必须唯一，而且以后不要改：
+   它是「这条已经种过 / 已被我删掉」的凭据。新版本里新增的条目
+   会在下次打开时自动补进来，已经改过的卡片不会被覆盖。
+   ============================================================ */
+const BUILTIN_CARDS=[
+  {id:"amsddkydqxgtf",
+   title:"Content Library Organization",
+   group:"业务问题",
+   cueText:"Sonio → organizing marketing content library → lots of useful content → scattered everywhere\n\nbuilt content database in Notion → links and files for everything published → went through piece by piece → tagged by persona, funnel stage, content type → educational for physicians = awareness → customer stories and case studies = conversion\n\nresult → clearer view of content inventory → spot gaps → tons of awareness but not enough conversion → tells us what to prioritize next",
+   fullText:"One project I worked on at Sonio was organizing our marketing content library. We had a lot of useful content, but it was scattered all over the place.\n\nSo I built a content database in Notion with links and files for everything we'd published, and I went through it piece by piece to tag each one by persona, funnel stage, and content type. So educational content for physicians got tagged as awareness stage, while customer stories and case studies were tagged as conversion stage.\n\nAs a result, the team had a much clearer view of our overall content inventory, and we could also spot the gaps in our existing content. For example, if we had tons of awareness stage content but not enough for the conversion stage, that told us what to prioritize next in content creation."},
+  {id:"ams759dtbhi4k",
+   title:"2B Digital campaign (Email Campaign)",
+   group:"业务问题",
+   cueText:"conference email campaign → one of our most important channels → warm up and invite before → recap and follow up after → qualified the attendee list → wrote the copy → tracked performance\n\na few thousand contacts → 3 to 5 percent, and we were fine with that → many weren't attending in person\n\nroutine process campaign, not a hard KPI → HubSpot execution → managing the whole project → sequence timeline planned ahead → posters and form links ready",
+   fullText:"One example was an email campaign I managed around medical conferences.\n\nMedical conferences were one of our most important marketing channels, so the goal was to warm up and invite our contacts before the conference, and afterward follow up, sharing a recap of the highlights. I was involved in almost every step, like qualifying the attendee list as part of the email recipients, writing the email copy, and tracking the campaign performance.\n\nDepending on the conference, we would email at least a few thousand contacts, and we were usually happy with around 3 to 5% engagement, because a lot of the recipients wouldn’t attend the conference in person.\n\nHonestly this was more of a routine process campaign, something that just has to happen, it’s not a marketing campaign with engagement as a hard KPI. But I still learned a lot about how to execute email campaigns in HubSpot, and how to manage the project as a whole. Things like planning out the email sequence timeline in advance and having the logistics like posters and form links ready to go."},
+  {id:"ams75cip1rzuh",
+   title:"2C Digital campaign (Influencer Campaign)",
+   group:"业务问题",
+   cueText:"Double Ninth → gift for parents → influencers dye their mothers’ hair → warmth, family connection\n\nKOL side → select influencers, coordinate timelines → review drafts → authentic, not pushy \n\n400k first week, 9 percent → shaping messaging + executing → carries over to B2B",
+   fullText:"I worked on a B2C social media campaign for the Double Ninth Festival in China. We wanted to position our hair color product as a thoughtful gift for parents. So the content was mainly influencers dyeing their mothers’ hair and sharing the whole experience. The emotional tone was warmth and a feeling of family connection.\n\nMy part was mainly on the KOL side, like selecting influencers and coordinating timelines. I also reviewed their content drafts, making sure the brand message felt authentic and more like real-life sharing instead of something too promotional or pushy.\n\nThe campaign got around 400,000 impressions in the first week, and the engagement rate was about 9 percent, which was above our target KPIs. That experience taught me a lot about how to shape messaging and execute a campaign, which I believe also carries over to B2B marketing as well."},
+  {id:"amsdggo95znsc",
+   title:"Automated workflow - lead qualification",
+   group:"业务问题",
+   cueText:"Sonio, three workflows → MQL → assign to rep, update owner → Slack plus follow up task \n\nout-of-market → site open globally → email explaining, point to other products\n\nincomplete info, job title → not found publicly → tag missing information → email asking about their project",
+   fullText:"At Sonio, I built three workflows for inbound lead qualification.\n\nOne was for inbound lead qualification and sales routing. Once a lead was qualified as an MQL, the workflow would assign it to the right sales rep and update the owner field in HubSpot. The rep would get a Slack notification plus a follow up task in HubSpot.\n\nAnother workflow was for inbound leads coming from regions where we didn't actually sell. Our site was open globally, so they could still request a demo through the form. That workflow would send them an email explaining we couldn't sell the product in their region, and suggested they explore our other global products instead.\n\nI also built a workflow for leads with incomplete information. Sometimes a lead would submit a form but leave out key information we needed for qualification, such as their job title. If I couldn’t find that information through public sources either, I would tag the lead as “missing information.” The workflow would then send them an email that politely asked whether they had a project that our product could help with."},
+  {id:"amsdfeglaqhzy",
+   title:"US persona guide",
+   group:"业务问题",
+   cueText:"US persona guide → Sonio expanding to the US → onboarding new reps\n\nstarted from existing materials → stakeholders and buying roles → wanted it to work in real conversations → talked to reps → common questions and pushback → how to respond → pulled experience across reps → they learn from each other\n\nsurfaced content gaps for marketing → a signal to improve",
+   fullText:"One project I worked on was creating a US persona guide for the sales team. Sonio was expanding into the US market, so it was a training material to help onboard new reps.\n\nI started with our existing materials to build the structure, including information about different stakeholders and their roles in the buying decision. But I also wanted the guide to actually help sales reps have real sales conversations, so I talked to a few of them to understand what was really coming up with prospects. For example, what questions or pushback they hear most often about our product, and how you'd respond to that.\n\nSince the guide pulled together experience from different reps, they could also learn from each other through it.\n\nAnd from the marketing side, we could also identify gaps in our existing content based on questions from prospect, So that was a good signal to help us improve our content."},
+  {id:"amsexbmku0kyu",
+   title:"Automated workflow - campaigns",
+   group:"业务问题",
+   cueText:"campaign side → two main workflows → webinars and persona nurturing\n\nwebinar workflow → email series → invite to post webinar follow up → branches by email interaction → invited but not registered → relevant content + re-invite → once signed up → reminder emails\n\nnurture workflow → existing marketing assets → engage specific personas → sequence starts general educational → gradually more product focused → based on engagement → build trust first → relevant content step by step → grow interest → move closer to buying\n\nmain goal for both → automate follow up to scale → content matched to journey stage",
+   fullText:"On the campaign side, I worked on two main workflows, one for webinars and one for persona nurturing.\n\nThe webinar workflow was for sending out a series of emails around a webinar, from the initial invite to post webinar follow up. We had branches depending on how people interacted with the emails. So if someone was invited but hadn't registered yet, we'd send them some relevant content and invite them again. Once they signed up, they'd start getting reminder emails before the webinar.\n\nThe nurture workflow was about sharing our existing marketing assets to engage specific personas. We designed a sequence that started with general educational content, and it would gradually bring in more product focused content based on how people engaged. The idea was to build trust first. By serving relevant content step by step, we kept people interested, grew that interest over time, and moved them closer to buying.\n\nThe main goal with both was to automate the follow up so it could scale, and to make sure people were getting content that actually matched where they were in the journey."},
+  {id:"amsdfioal50wa",
+   title:"Sales Deck Refresh",
+   group:"业务问题",
+   cueText:"Sonio, refresh the sales deck → old version was feature-led → too much detail, long and fragmented → wanted a storyline → why should a hospital switch to Sonio\n\nreframe around overall value → lead with the problem, information silos → then how we solve it → differentiation, AI-assisted and cloud-based\n\nclearer, easier to remember → coherent story reps adapt to stakeholders",
+   fullText:"One project I worked on at Sonio was refreshing the sales deck. The old version focused on walking through all our product features, but going into too much detail made the demo feel a bit long and fragmented. So the marketing team wanted to give it a clearer storyline, basically answering a question that why should a hospital switch to Sonio for ultrasound reporting?\n\nI worked with another manager to reframe the deck around Sonio’s overall value. We wanted to first highlight that Sonio is cloud-based, so we started with the problem of information silos in healthcare and then showed how the product could address that.\n\nWe also made the differentiation section clearer, again focusing on what made us different, especially the AI-assisted and cloud-based aspects.\n\nIn the end, the updated deck made our core value proposition much clearer and easier to remember. It also gave the sales reps a more coherent story that they could adapt to different stakeholders."},
+  {id:"ams75a90ctpab",
+   title:"A/B testing",
+   group:"业务问题",
+   cueText:"Sonio A/B → conference invite → narrative frame → CTR → busy clinicians → value-first\n\ngrammatical subject → same CTA → \"we\" company-centered vs \"you\" reader benefit → same offer different framing\n\nmatched expectation → direct won → same content still more relevant → win attention",
+   fullText:"At Sonio, I ran an A/B test on a conference invite email. I set it up to see whether the narrative frame of the content could improve the click-through rate. My thinking was that our audience was busy healthcare professionals, so I figured a direct and value first tone would land better.\n\nThe main thing I changed was the grammatical subject of the sentences. I kept the CTA the same and just changed the angle of the message. We had a“we” version, and it centers on our company, like what we'll be bringing this to the conference, come visit us. The other is the “you” version, it led with the reader’s benefit, like “here’s what you’ll get if you stop by our booth.” So the offer itself stayed the same, but the second version framed it around the recipient’s needs, which feels more relevant to them.\n\nThe results matched what I'd expected. The more direct version got better click through rates. What I took from that is that in B2B content, even when the core content stays the same, you can still make it more relevant to the reader and win their attention that way."},
+  {id:"ams75f2difbe3",
+   title:"Manual lead qualification",
+   group:"业务问题",
+   cueText:"manual qualification before sales → form completeness + accuracy → personal + account → ICP → blank job title → website + LinkedIn → follow up email → considered automating → low volume + fixed accounts → accuracy over efficiency → stuck with manual",
+   fullText:"One of my roles was manually qualifying inbound leads before passing them to sales.\n\nI'd check whether the info a lead submitted in the form was complete and accurate, both their personal details and the details of the account they're affiliated with. Based on that I'd figure out if they were our ICP. \n\nIf they left some fields blank, like job title, I'd try to find that info on the hospital's website or LinkedIn and fill it in myself. And if I still couldn't find the key stuff I needed to judge whether they were ICP, like their job title, I'd send a quick follow up email.\n\nWe did consider automating the qualification, but our lead volume wasn't that big, and since the target accounts were pretty fixed, the accuracy of the contact data mattered a lot. Automation wouldn't have gained us much efficiency and it came with a lot of uncertainty, so at that stage we just stuck with doing it manually."},
+  {id:"amslplu6r1qp1",
+   title:"Edge - Azure",
+   group:"业务问题",
+   cueText:"Azure benchmark → Chinese cloud provider → how Azure grew → revenue + sales org → no separate breakout → expert network reconstruction\n\ngrowth was organizational → 2014 leadership change → cloud top priority → realigned incentives → sales reps' major target\n\ntakeaway → more than good product → leadership commitment + aligned incentives → change sticks",
+   fullText:"The Azure benchmark project, the client was a Chinese cloud provider, they wanted to understand how Azure had grown, especially in terms of its revenue and sales organization. The tricky part was that Microsoft doesn’t break out Azure’s revenue separately, so we had to reconstruct it using an expert network.\n\nWhat we found was that a big part of Azure’s growth was actually organizational. After a leadership change in 2014, Microsoft made cloud a top priority and realigned its sales incentives, so cloud became a major target for sales reps.\n\nAnd the takeaway for our client was that tech transformation takes more than a good product. You also need strong leadership commitment and aligned incentives to make the change stick."},
+  {id:"amslprn8qzeyp",
+   title:"Edge - Alibaba Cloud",
+   group:"业务问题",
+   cueText:"Edge benchmark, major Chinese cloud provider → revenue by industry and product line\n\ngrowth from internet and retail → and from basic IaaS, compute, storage, databases → higher-value products lagging\n\noverall growth slowing → large customers building their own data centers → vulnerability going forward",
+   fullText:"One consulting project I worked on at Edge was a benchmark project for a major Chinese cloud provider. We mainly looked at how their revenue was distributed across different industries and product lines.\n\nWe found that most of the growth was coming from internet and retail customers, as well as more basic IaaS products like compute, storage, and databases. Meanwhile, higher-value products weren’t growing as quickly.\n\nWe also noticed some signs that overall growth was starting to slow down. One factor was that some of their larger customers were beginning to build their own data centers, which could signal some vulnerability for the business going forward."},
+  {id:"amshnqrfryfj4",
+   title:"New Product Positioning Strategy",
+   group:"业务问题",
+   cueText:"Henkel, premium line, mature women\n\ncompetitor analysis → floral is the default\n\nteam’s review analysis → negative reviews, chemical smell\n\nput the two together → woody → distinctive, sophisticated, fits the audience → stands out → woody also masks the smell\n\nshared with manager → R&D feasibility → launched after I left, performed well\n\nstart from the default → add customer insight and positioning → turn into a product idea",
+   fullText:"One project that stands out was when I was at Henkel. We were launching a premium hair color line for mature, quality-conscious women.\n\nAt the beginning, I did a comparative analysis of other premium brands to understand what the market looked like for this type of product. And I noticed most competitors used floral fragrances, which is kind of the default for hair color products.\n\nBefore that, the marketing team had also done a review analysis on our e-commerce store, mainly looking at what the negative reviews were about. And result showed that the biggest concern was the chemical smell of our current products.\n\nSo, putting these two insights together, I thought maybe we could go with a woody fragrance for our premium product. It would give the product a more distinctive and sophisticated feel, which I thought fit our mature audience well, and it helped us stand out from competitors.\n\nOn top of that, woody notes were stronger, so they could also help mask the chemical smell that customers had mentioned.\n\nI shared the idea with my manager, and then we worked closely with the R&D team to make sure it was technically feasible. The product was eventually launched after I left the company, but based on the e-commerce store data, it performed well from the start.\n\nFor me, it was a really valuable experience, because I got to see how you can start from common designs in the market, then combine with your specific customer insights and your own brand positioning, finally turning those insights into a product idea."},
+  {id:"amshns2k0cdix",
+   title:"Market Prioritization Strategy for Hospital Targeting",
+   group:"业务问题",
+   cueText:"prescription drug, field-based reps → marketing guides regional priority\n\nqualitative + quantitative → rep feedback, competitors, openness to switch → regional brand sales\n\ntwo-by-two → potential + vulnerability → patient volume + medical need → competitive presence + department access\n\nhigh potential likely adopt = priority → high potential locked in = long-term",
+   fullText:"One project I worked on was a hospital targeting strategy for a prescription drug. Since our sales team was field-based, reps in different regions would visit hospitals in person. So the marketing team needed to guide them on which hospitals to prioritize, based on the local market situation.\n\nThis required looking at both qualitative and quantitative data. The qualitative side came from field feedback from sales reps, like which competitors doctors were using, and how open doctors were to switching. The quantitative side was the sales data for different brands in each region.\n\nBased on that, I built a simple two-by-two framework, using hospital potential and vulnerability to segment the hospitals. Hospital potential was about patient volume and medical need, and vulnerability looked at things like competitive presence and access to the department.\n\nHospitals with high potential and also seem likely to adopt became our priority targets. If a hospital had high potential but was already strongly tied to competitors, we treated it more as a long-term strategic account."},
+  {id:"amsjj3l68w0f5",
+   title:"How do you see the relationship between mkt and sales, any disagreements?",
+   group:"业务问题",
+   cueText:"two connected stages → marketing owns reach and MQLs → sales owns closed deals and conversion → tightly connected, things to align\n\nhow we defined an MQL → engagement with assets → passed everything to sales → sales saw people not ready to buy → whitepaper is interest, not intent → kept the definition, moved the handoff to demo requests\n\nsecond area, attribution → ads, content, no action → months later sales outreach → first touch versus last touch → first touch in the current buying journey\n\nshared definitions → collaboration gets smoother",
+   fullText:"I see marketing and sales as two connected stages of the pipeline, one after the other. Marketing handles the top of the funnel, expanding reach to bring in more leads, so one of marketing’s KPIs is the number of MQLs. Then sales takes those MQLs and filters through them, so their KPIs are closed deals and conversion rate.\n\nBecause the two stages are so tightly connected, there's inevitably some stuff to align.\nAt Sonio, for example, we had some discussion around how we defined an MQL. Marketing considered someone qualified based on whether they had interacted with our marketing assets or campaigns, and we would pass all MQLs to sales for follow-up.\n\nBut from what sales were seeing, a lot of the people hitting that bar weren't ready to buy. Someone downloading a whitepaper shows interest, sure, but it doesn't necessarily mean they're in the market right now. So we adjusted the handoff criteria. We still qualified people who interacted with our marketing assets as MQLs, but sales would only follow up with the ones who had requested a demo.\n\nAnother area was how a given pipeline should be credited to marketing or sales. For example, a lead might first hear about Sonio through ads and engage with some of our content, but they didn’t take any further action. Then a few months later sales does an outreach and that's when the opportunity actually enters the pipeline. The two common approaches are crediting the first touch point or the last one. In the end we decided to go with the first touch point in the current buying journey.\n\nFor me, good marketing and sales alignment comes down to those shared definitions. Once those are clear, the collaboration gets a lot smoother."},
+  {id:"ams22aht1n0nc",
+   title:"Account enrichment project",
+   group:"Behavioral questions",
+   cueText:"account enrichment at Sonio → identify MFM specialists → US hospitals → sales outreach\n\nfull target account list → tried manual first → too many, same research repeated → didn't scale → enrichment tools → weak for healthcare\n\ndifferent approach → ChatGPT with web search as research assistant → structured prompt → where to search, what to pull, how to validate → confirm MFM specialist + right hospital affiliation\n\ncompared against manual research → ~90 percent accuracy → confidence it was reliable → team adopted it → saved research time\n\nif doing it now → AI agent → account list straight to outreach-ready contacts → less manual work in between",
+   fullText:"One project I’m proud of was an account enrichment project at Sonio. The goal was to identify MFM specialists across hospitals in the US for the sales outreach.\n\nWe had a list of all the target accounts to enrich. At first I tried working through it manually, but there were way too many, and every single one meant repeating the same research from scratch. It just didn't scale. I also tried a few enrichment tools, but they didn't work very well for healthcare.\n\nSo I tried a different approach. I used ChatGPT with web search as a research assistant. I wrote a structured prompt that guided where to search, what to pull, and how to validate it, like confirming the person was actually an MFM specialist and affiliated with the right hospital.\n\nThen I compared the results with my own manual research, and the accuracy was around 90 percent, which gave me confidence it was reliable. After that the team started using it, and it saved us a lot of research time. \n\nIf I were doing it now, I’d probably use an AI agent to automate even more of it, like going from an account list straight to an outreach-ready contact list with much less manual work in between."},
+  {id:"ams22aht1fw6f",
+   title:"A time you used data to find insight",
+   group:"Behavioral questions",
+   cueText:"Sonio, Facebook as new channel → looked successful, more leads → further down the funnel → MQL rate much lower than LinkedIn\n\nchecked qualification results → not our ICP, didn’t need the product → adjusted targeting → quality didn’t improve → cut spend\n\nnot one stage in isolation → whole funnel → potential to move forward",
+   fullText:"One example that comes to mind is a channel performance analysis I did at Sonio.\n\nWe were investing more in Facebook ads as a new channel, and at first, it looked pretty successful because we received more leads from Facebook. But when I looked further down the funnel, I noticed that Facebook leads were converting to MQLs at a much lower rate than leads from other channels like LinkedIn.\n\nSo I went through the qualification results, and I found that a lot of the Facebook leads didn’t match our ICP. They didn’t actually need Sonio’s product. Although we tried adjusting the targeting settings to reach a more relevant audience, the lead quality didn’t improve much. So in the end, we cut back a lot on Facebook spend.\n\nWhat I learnt from this experience is that when you’re managing a pipeline, you can’t just look at one stage in isolation. You need to look at the whole funnel and see whether a prospect has the potential to move forward."},
+  {id:"ams22aht1xh25",
+   title:"A time you showed initiative (detail oriented)",
+   group:"Behavioral questions",
+   cueText:"Sonio, reviewing HubSpot workflows → out-of-market demo requests → auto email explaining → but scheduled two days later → they'd shown interest → we knew the region from the start → nothing to wait for\n\nraised it with the workflow owner → explained my reasoning → changed to send immediately → small change, real difference to the experience",
+   fullText:"One example that comes to mind is from my time at Sonio. I was reviewing some HubSpot workflows and noticed one that I thought could be improved.\n\nIt was for leads who requested a demo but were in regions where we couldn’t sell our product. The workflow would automatically send them an email explaining that, but the email was scheduled to go out two days after they submitted the form.\n\nI didn’t believe that was a great experience for the prospects. The lead had shown interest, and we knew their region from the beginning, but they had to wait two days just to receive the explanation.\n\nSo I brought it up with the colleague who owned the workflow and explained my reasoning. We updated it so the email would go out right away instead of making people wait.\nIt was a small change, but I thought it made a meaningful difference to the customer experience."},
+  {id:"ams22aht1p3xa",
+   title:"A time you were detail oriented in data",
+   group:"Behavioral questions",
+   cueText:"Aspen weekly dashboard → competitors Excel → one region unusually high → didn't line up → first thought miscalculated\n\nchecked formulas → looked fine → suspect data received → looped in colleague → owned the export → filter setting wrong → inflated\n\nafter we fixed → simple checklist → export settings and mappings → before calculation → never again\n\ndetail oriented → rough sense of expected → catch when doesn't add up",
+   fullText:"At Aspen, I was doing a weekly sales dashboard across our competitors in Excel. I noticed the numbers for one region looked unusually high. It didn't line up with how these brands had performed there before, so my first thought was that I had miscalculated something.\n\nI checked my formulas and everything looked fine, which made me suspect there might be an issue with the data I'd received. So I looped in the colleague who owned the export from the database. It turned out that one of the filter settings on the database export had been set wrong, and that's why the numbers inflated.\n\nAfter we fixed it, we added a simple checklist to review export settings and mappings before calculation, so it didn’t happen again afterward.\n\nHonestly, my big takeaway was that being detail oriented means having a rough sense of what the data should look like, so you catch the issue when something doesn't add up."},
+  {id:"ams22aht1qol1",
+   title:"A time you received negative feedback",
+   group:"Behavioral questions",
+   cueText:"US persona guide → expanding US → onboarding reps\n\nexisting materials → first draft → too theoretical → no real conversations\n\nfrustrated → then talked to reps → actual questions and pushback → how to respond\n\nlanded better → pooled experience → learn from each other\n\nmarketing → content gaps → signal to improve",
+   fullText:"One project I worked on was creating a US persona guide for the sales team. Sonio was expanding into the US market, so it was a training material to help onboard new reps.\n\nI started with our existing training materials to build the structure, and my first draft got negative feedback. Sales people said it felt too theoretical, and didn’t really help them understand where different prospects were coming from in actual sales conversations, and how sales could respond to them. \n\nI was a bit frustrated at first, but their feedback also reminded me what I needed to change. So I talked with a few sales reps to hear what prospects were actually asking. For example, what questions or pushback sales people hear most often about our product, and how you'd respond to that.\n\nThe update landed much better, since the guide pulled together experience from different reps, they could also learn from each other through it.\n\nAnd from the marketing side, we could also identify gaps in our existing content based on questions from prospects, so that was a good signal to help us improve our content."},
+  {id:"ams22aht12r56",
+   title:"A frustrating experience working with a colleague",
+   group:"Behavioral questions",
+   cueText:"Sonio cross-functional → revenue colleague → first time → HubSpot updates\n\n3 days → time sensitive → not push → alignment meeting with sales\n\nsales explains why → I prep in advance → small part → reprioritize → on track, smoother\n\nmissing context or priorities → start with why → constraints → make it easy",
+   fullText:"One example was at Sonio when I was working on a cross-functional project with someone from the revenue team. It was our first time working together, and the next step of the project depended on a few updates she needed to make in HubSpot.\n\nAfter I explained the task, she said she probably can get to it in about 3 days. But the project was pretty time sensitive, so we can't wait that long. But instead of just asking her to speed things up, I suggested a quick alignment meeting with her and one of our sales colleagues. \n\nDuring the meeting, the sales colleague explained why the timing mattered on their side, and I showed that I’d prep everything in advance, so her part was actually quite small. Once she understood the urgency and the limited workload, she was happy to reprioritize. We kept the project on track, and after that working together was smoother.\n\nWhat I took away is that when someone seems hesitant, they might just be missing context or juggling other priorities. Now, I try to start with the “why”, understand their constraints, and make it as easy as possible for them to contribute."},
+  {id:"ams22aht1xln8",
+   title:"A time you had to juggle multiple tasks or deal with stress",
+   group:"Behavioral questions",
+   cueText:"sales urgently needed enrichment, big list → plus my own marketing work\n\nstarted manually → scope way bigger than expected → raised it with my manager → split the work or find a faster way\n\ntried tools → AI web search helped → still not enough for the timeline → sales brought in a dedicated intern\n\nnot about working harder → communicate early, be realistic about scope → team adjusts the plan",
+   fullText:"One time at Sonio, the sales team urgently needed the marketing team to enrich contact data for a big list of target accounts. At the same time, I still had my regular marketing tasks, so it was a lot to balance.\n\nI started working through the list manually, but pretty quickly realized the scope was way bigger than expected. So, I brought it up with my manager and suggested we either split the work or find a faster approach.\n\nAfter trying a few tools, we found that AI-assisted web search could speed things up, but the efficiency gains still weren’t enough to get it done within the timeline. After some back and forth with the sales team, they decided to bring in a dedicated intern to help with the workload.\n\nSo for me, dealing with pressure isn’t just about working harder. It’s also about communicating early and being realistic about the scope, so the team can have a clearer idea of the actual capacity and adjust the plan accordingly."},
+  {id:"ams22aht1ovgi",
+   title:"A time you learned a new skill or picked up something new",
+   group:"Behavioral questions",
+   cueText:"Sonio HubSpot never used at work → tutorials + docs → most-used features → apply right away → lead qual + email campaigns → SOP while doing → writing makes it accurate → think you know until you write → gaps surface → playbook → basics, use fast, write down → sticks and shared",
+   fullText:"One example was when I joined Sonio. The marketing team used HubSpot every day, but I hadn’t used it in a work environment before. So I started with the basics, going through tutorials and our team’s internal docs, and focusing on the features we used most in our day-to-day work.\n\nOnce I learned something, I tried to apply it right away in real tasks to reinforce what I’d learned, like lead qualification and email campaigns.\n\nAt the same time, I documented each step as an SOP while I was doing the task. I found that really helpful because writing things down makes your understanding more accurate.\n\nSometimes you think you know how to do it, but when you actually write down every step, it helps you identify and clear up any gaps or uncertainty. It also gives you an accurate playbook to refer back to later when you’re still getting familiar with the process. \n\nSince then, that’s kind of how I approach new tools: get the basics down, start using them quickly, and write things down so the knowledge sticks and can be shared with others."},
+  {id:"amshdiaxqdw8l",
+   title:"A time you dealt with an unhappy client",
+   group:"Behavioral questions",
+   cueText:"Edge, weekly newsletter, cloud client → updates plus commentary\n\nvague feedback, couldn't say what was missing → back and forth went nowhere → went through all past feedback → pattern: competitor news → drafted a few versions, asked which angle → not broad commentary → specific, what it means for them → threat or opportunity\n\nonce shift → used in internal strategy discussions → patterns in feedback, then test options",
+   fullText:"At Edge Consulting, I wrote weekly industry newsletters for a cloud computing client. The newsletter had two parts, the industry updates I gathered and the commentary I wrote based on that.\n\nWhen I shared my first draft, the client's feedback was pretty vague. They said my commentary wasn't quite what they wanted, but they couldn't explain what was missing. So it was difficult to know what exactly I should change.\n\nWe had some back and forth, but it didn’t get us anywhere, so I could just go back through all their feedback, and I noticed a pattern: a lot of the comments they weren’t happy with were about competitor news.\nSo the next time, I drafted a few versions and asked which angle worked best. That helped me realize that they didn’t want broad or general commentary. They wanted us to be much more specific and direct about what the news actually meant for their company, like whether it represented a potential threat or an opportunity.\n\nOnce I shifted to that angle, the client was happy. At one point they even said the newsletter had been used in internal strategy discussions. The lesson for me was that when clients can’t clearly articulate what they want, I could still try to look for patterns in their past feedback and test specific options."},
+  {id:"ams225ttm0msr",
+   title:"Sonio GTM 介绍",
+   group:"实习总体介绍",
+   cueText:"prenatal SaaS → niche → specific audience → sales-led outbound → hospitals not inbound\n\nevents → conferences booth → highest conversion\n\nSEO/webinars/paid ads → top of funnel\n\nemail, outreach and nurturing, tailored by stage, down the funnel",
+   fullText:"Sonio is a SaaS company in the prenatal healthcare space. Since it’s a niche market, our target audience was quite specific and well defined. Because of that, our go-to-market strategy was mainly sales-led outbound, since it was more effective to proactively reach the right hospitals and clinicians than wait for inbound.\n\nFrom a marketing angle our biggest channel was events, especially medical conferences where we had a booth. Those usually generated the highest pipeline conversion rates.\n\nWe also ran inbound channels like SEO, webinars, and paid ads, / which helped build awareness and generate top of funnel leads.\n\nThen we used email campaigns for outbound outreach and lead nurturing, sending tailored content based on where people were in the buying journey, to help move them further down the funnel."},
+  {id:"amsej8c1vbac6",
+   title:"Sonio Product",
+   group:"实习总体介绍",
+   cueText:"Sonio → AI powered, cloud based → prenatal ultrasound → sonographers + OBGYNs → real time image recognition → image quality check → retake or not → protocol shows missing views\n\nafter exam → organizes images → pre-fills report → less paperwork\n\ncloud based → exam history shared across network → useful for specialist referral",
+   fullText:"Sonio is an AI powered, cloud based platform for prenatal ultrasound. It basically helps sonographers and OBGYNs by recognizing ultrasound images in real time. It checks image quality so the sonographer knows whether they need to retake the scan, and there's a protocol that shows which views are still missing during the exam.\n\nAfter the exam, it organizes the images and pre-fills the report based on what’s in the images, so clinicians don’t have to spend as much time on paperwork.\n\nAnd because it's cloud based, the patient's exam history can be shared across the same healthcare network, which is really useful if the patient gets referred to a specialist."},
+  {id:"ams22aht1j5rc",
+   title:"Role at Sonio",
+   group:"实习总体介绍",
+   cueText:"Sonio marketing → B2B inbound → CRM ops\n\nbiggest CRM → qualification → clean data → pipeline tracking → workflows\n\nemail campaigns → marketing assets",
+   fullText:"I interned at Sonio on their marketing team. I mostly worked on B2B inbound marketing and CRM ops.\n\nI managed lead life cycles and built automated workflows in HubSpot, helped out with digital campaigns and sales enablement, and did funnel reporting tracking MQL conversion rates."},
+  {id:"ams22aht1vnqh",
+   title:"Role at Aspen",
+   group:"实习总体介绍",
+   cueText:"Aspen, prescription drug, sales-led, field reps\n\nCRM and sales analytics → customer and visit data in Excel → weekly regional performance → faster vs falling behind → guide reps on hospital priority\n\nsales enablement → materials and webinars → mix of CRM and enablement",
+   fullText:"At Aspen, I worked on the prescription drug team. It was a sales-led business, our field reps would go out and visit customers in person.\n\nMy main focus was CRM and sales analytics. I kept customer and visit data up to date in Excel spreadsheets. Every week, I analyzed sales performance across different regions to see where we were growing faster and where we were falling behind. The idea was to use those market trends to guide the field reps on which hospitals they should prioritize for visiting.\n\nI also did some sales enablement work, like preparing sales materials and supporting webinars. So overall, the role was a mix of CRM and sales enablement."},
+  {id:"ams22aht1x5rz",
+   title:"Role at Henkel",
+   group:"实习总体介绍",
+   cueText:"Henkel hair color China → premium launch → competitive analysis → pricing + messaging → influencer festival\n\nopened my eyes → rare → build on conventions → then differentiate → universal and special",
+   fullText:"At Henkel, I was on the marketing team for a hair color brand in China.\n\nI helped launch a new premium product, including a competitive analysis to position the new product based on our competitors’ pricing and key messaging. I also worked on an influencer social media campaign around a Chinese festival.\n\nI think what opened my eyes the most was the new product launch, because that's a rare opportunity. It's not something every brand marketing intern gets to be part of.\n\nWhat I learned was that even when you’re creating a new consumer product, you’re usually still building on existing industry conventions and then finding ways to differentiate. You need both the universal part and the specific part."},
+  {id:"ams22aht1uix8",
+   title:"Role at Edge",
+   group:"实习总体介绍",
+   cueText:"Edge, market research analyst intern, cloud computing → competitor benchmarking and industry research → major providers in China and the US → strategic moves\n\nweekly newsletter for a client → industry updates → what they meant for their business\n\nanalysis methods that carry across industries → hands-on research and project management",
+   fullText:"At Edge Consulting, I was a Market Research Analyst Intern focused on the cloud computing space. Most of my work was around competitor benchmarking and industry research. For example, I worked on projects analyzing major cloud providers in China and the US, looking at things like their strategic moves.\n\nI also wrote a weekly internal newsletter for a cloud computing client. I summarized industry updates and explained what they could mean for the client’s business.\n\nThat experience was really valuable to me, I picked up business and market analysis methods that carry over to many industries, and also get some hands-on experience with research and project management."},
+  {id:"amslor3dxy97e",
+   title:"Edge 工作内容",
+   group:"实习总体介绍",
+   cueText:"Edge, cloud computing, two projects → desk research + expert interviews\n\neach project answers client questions → knowledge base from reports and news → public data leaves gaps → experts fill gaps → weave into a coherent story\n\nAzure sales structure over ten years → research gives trends and framework → remaining questions → bring to experts",
+   fullText:"At Edge Consulting, I worked as a market analyst intern focusing on the cloud computing sector. I worked closely with my mentor on two projects. The research method was desk research plus expert interviews, and I was involved in both.\n\nI saw each project as answering specific questions from the client. So I would first build a knowledge base from public sources about the topic, such as industry reports and news articles. But a lot of the key stuff couldn’t be answered with public data alone, so we would interview industry experts to fill those gaps. Then we would weave those insights into a coherent story for the client.\n\nFor example, one project was about how Azure’s frontline sales team structure changed over ten years. I used existing research to understand the overall trends and build an initial framework from there, then I could identify the areas we still had questions, so we could brought these questions to experts interview."},
+  {id:"ams22aht1f8el",
+   title:"Aspen's experience differs from that of Sonio",
+   group:"实习总体介绍",
+   cueText:"Sonio is more relevant → Aspen was field-based → interaction happened in person → less digital tracking → no CRM, Excel for records → but I learned the logic behind CRM processes → why they matter, data hygiene\n\nSonio, hands-on digital → CRM ops every day → automation and campaigns → figured out my direction → closer to this role's day to day",
+   fullText:"My experience at Sonio is definitely more relevant to this role. At Aspen, the sales team was field-based, so most of the customer interaction happened in the field. There was less digital tracking or digital marketing, and we didn’t have a dedicated CRM system. We used Excel to manage contact and account records. But it still helped me understand the logic behind good CRM processes and why they matter, things like data hygiene.\n\nBut at Sonio I got much more hands-on experience with the digital side. I was doing CRM operations everyday, working with features like automation and running digital campaigns. So Sonio helped me figure out the direction I want to go in, and it's much closer to the day to day work of this role."},
+  {id:"ams22aht19ic2",
+   title:"Favorite part of work at Sonio",
+   group:"实习总体介绍",
+   cueText:"data hygiene → consistent standard → personality, sudoku, rules → entry rules, workflows → same sense of order",
+   fullText:"My favorite part was working on CRM data hygiene. I like making things organized based on a consistent standard. I think it's part of my personality, because I also enjoy doing sudoku in my free time, where you're following a set of rules to work through and organize each step. So in CRM, things like defining data entry rules and designing workflows give me that same sense of order."},
+  {id:"ams22aht1gjhv",
+   title:"Least favorite part of work at Sonio",
+   group:"实习总体介绍",
+   cueText:"manual contact and account research → in lead qualification\n\nforms come in with blanks → job title, company → search public sources and databases → high volume, a lot of time \n\nwhy, it keeps CRM data accurate → qualifying on reliable info → if I did it again, automate more → AI-assisted web search → not every record by hand",
+   fullText:"If I had to pick one, I'd probably say the manual research on contacts and account info during lead qualification.\n\nSometimes new leads would submit a form but leave things like their job title or company blank. So, to figure out whether they were our target audience, I’d search public sources or databases to fill in those missing details. When the volume was high, it could take quite a lot of time.\n\nI understand why the work has to exist, it keeps the CRM data accurate and makes sure we’re qualifying leads based on reliable information. But if I were doing it again, I'd think about how to make it more automated. Like now we have AI assisted web search, so you don't have to manually look up and check every single record."},
+  {id:"ams22aht16hei",
+   title:"Why switch from journalism to business",
+   group:"实习总体介绍",
+   cueText:"high school nonfiction, social reporting → gathering from sources, organizing into story → satisfying\n\nuniversity, more subjects → the research process itself → making things structured\n\nbusiness and finance reporting → business and data → same satisfaction\n\nbusiness internships → found my direction",
+   fullText:"I started in journalism because, back in high school, I was really into nonfiction, especially in-depth reporting on social issues. I liked the process of gathering information from different sources and then writing it into a clear story. I thought that was very satisfying.\n\nOnce I got to university, I was exposed to more subjects, and I started to realize that what I enjoyed was the research process itself, and also the process of making things more structured and organized.\n\nI also worked on a few reporting projects related to business and finance, and that made me found I was more interested in business and data. They also gave me that same sense of satisfaction I got from research and organizing information.\n\nSo after that, I started exploring business-related internships, and over time, that helped me figure out the direction I want to take with my career."},
+  {id:"ams22aht1eexp",
+   title:"What did journalism help you with",
+   group:"实习总体介绍",
+   cueText:"thinking through what you already have → what still needs digging into → how to get it, ask or gather\n\nsounds abstract → a habit of mind → the gap between the information you have and the information you want → different ways to close it",
+   fullText:"The biggest thing I took from journalism is thinking through the information you already have. Like asking yourself what still needs digging into, and how you might get more of it, whether that's by asking questions or gathering material.\n\nThat might sound a bit abstract. To me it's more of a habit of mind. You're constantly noticing the gap between the information you have and the information you want, and then you find different ways to close that gap."},
+  {id:"amsjf9ykfchzf",
+   title:"Your coworkers would say your strength and weakness ?",
+   group:"Personality",
+   cueText:"resourceful → solutions I can reuse → automation and things that scale → in my own time, AI-built HTML tools → printing layouts, countdown timers → at work, HubSpot questions → answer, then send the knowledge base → so they can refer back\n\nweakness, too much prep before starting → don't need everything figured out → start, get feedback, improve → working on it",
+   fullText:"I think my teammates would probably describe me as resourceful.\n\nI like finding solutions that I can reuse long term, so I'm really into things like automation and anything that scales. In my own time I'll use AI to build little HTML tools to automate repetitive stuff, like printing layouts or custom countdown timers. In my previous CRM intern role, if someone came to me and asked how a feature worked in HubSpot, I'd answer the question of course, but I'd also send them the corresponding knowledge base, so they could have a resource to refer back to.\n\nFor weaknesses, I'd say I sometimes spend a bit too much time preparing before I start. But I've learned that you don't need to figure out everything from the beginning. The fastest way to make progress is to just start, get feedback, and improve as you go. That's something I'm working on."},
+  {id:"amsjhorzfca86",
+   title:"Describe your personality in a few words",
+   group:"Personality",
+   cueText:"minimalist → sense of order → concentrate on what actually matters\n\nclassic question → one thing at 90 vs many at 70 → pick the first without hesitation → few truly important things → limited resources to what matters most → prioritization\n\nminimalism keeps you focused → pushes toward clarity → own less, fewer things → easier to feel satisfied → know exactly what you're doing → too much to organize → organizing eats mental energy → stop enjoying the things themselves",
+   fullText:"I'd describe myself as a minimalist. Partly because I really like a sense of order, and partly because I prefer to concentrate on the things I think actually matter.\n\nIt's kind of like the classic question, would you rather do one thing really well at a 90, or do many things at 70? I'd pick the first without hesitation. I don't think there are that many truly important things, so you should put your limited resources into the ones that matter most. It's a form of prioritization, basically.\n\nAnd minimalism helps you stay focused through that process. It pushes you toward clarity too. When you own less, or when you have fewer things to focus on, it's easier to feel satisfied, because you know exactly what you're supposed to be doing. When you've got a ton of things to do or a ton of stuff to organize, the organizing itself eats up your mental energy, and you end up not enjoying the things themselves."},
+  {id:"amslap5zu04hd",
+   title:"Are you a self starter or prefers to be given direction?",
+   group:"Personality",
+   cueText:"self starter → but alignment matters at work → you take direction, talk it through\n\nit's about executing your own piece → spot a problem, work out why, find a solution → not checking in on every little thing → once the context is clear → space to focus, take ownership",
+   fullText:"I would say I'm a self starter. But at work, I think having clear alignment on a shared project also matters, so you're inevitably going to take direction or talk it through with people.\n\nSo in that sense, I’d say I’m self-directed. Once I understand the bigger picture, I like having some space to focus on the work and get into a flow.\n\nTo me, being a self starter is more about your own projects, or how you execute your own piece within a team project. Meaning if you spot a problem, you can analyze why it's happening and go find a solution yourself, rather than checking in with someone about every little thing. In that sense, I'm a self starter. Once the overall context of a task is clear, I like working on my own and taking ownership."},
+  {id:"amslapwzxlxwm",
+   title:"What kind of team player are you?",
+   group:"Personality",
+   cueText:"reliable executor → clear task → plan steps myself → execute, check, report back → also improve the process → idea contributor\n\nperson doing the work → hands-on experience → judge if approach holds up → unexpected situations → can't map it all upfront → start then improve step by step",
+   fullText:"I see myself as a reliable executor. If there's a clear task to move forward, I can plan out the actual steps on my own, then execute, check the work, and report back. But along the way I'll also actively look for ways to improve the process and make the work better. So I'd also say I'm an idea contributor.\n\nI think the person actually doing the work has more hands-on experience, so they're better positioned to judge whether an approach will really hold up in the workflow. Because in reality, you run into all kinds of unexpected situations, and you can't map the whole thing out from the start. You just start, and then improve it step by step."},
+  {id:"amslat09x307i",
+   title:"What kind of work environment do you like?",
+   group:"Personality",
+   cueText:"best environment → flexible + continuous improvement → open minded colleagues → actively looking for what could be done better → a lot of work is process driven → repetitive stuff can be optimized → sensitivity to their own work → drive to improve their piece → everything runs smoother\n\nalso value supportive atmosphere → work is getting through difficult moments → teammates who support each other → confidence and reassurance",
+   fullText:"I think I do best in a work environment that's flexible and pushing for continuous improvement. Meaning the people I work with are open minded and actively looking for things that could be done better. A lot of what we do at work is process driven, and I would say a lot of that repetitive stuff can be optimized. So if my colleagues have that sensitivity to the work they're doing, and that drive to improve their own piece of it, I believe everything would run a lot more smoothly.\n\nI also really value a supportive atmosphere. Work is often about getting through difficult moments, so it’s great to have teammates who support each other and give you that sense of confidence and reassurance."},
+  {id:"amslawivxxhqr",
+   title:"Weakness and how to work on it",
+   group:"Personality",
+   cueText:"over preparing → everything ready before starting → slows me down → never 100 percent ready → avoiding the start\n\ntime-boxed prep → first version sooner → not a perfect start → find direction by doing → iterate fast",
+   fullText:"One thing I've been working on is not over preparing. I used to feel like I had to have everything ready before I officially started, but I realized that actually slows me down. Because you can never feel 100% ready. Sometimes, it’s just a way of avoiding the reality of getting started.\n\nNow I give myself a set amount of time for preparation, and try to get a first version out sooner. I don't expect myself to start perfectly. But once I've started, I can find the right direction by doing, and I can iterate fast from there."},
+  {id:"amslcog1rxrse",
+   title:"Do you prefer working independently or as part of a team?",
+   group:"Personality",
+   cueText:"prefer independent → once the goal is clear → space to focus, get into flow → satisfaction seeing it come together\n\nbut collaboration matters → align on context and goal first → collaborate to align, then execute independently",
+   fullText:"If I had to choose, I’d say I prefer working independently. Once I’m clear on the goal, I like having some space to focus and get into flow. It gives me a sense of satisfaction when I can see the work gradually come together.\n\nThat said, I also think collaboration is important. At first I would align with my teammates on the context and the goal. So for me, collaborate first to get aligned, then work independently to execute."},
+  {id:"amsldahbxt3bx",
+   title:"What do you do when a task isn't clear?",
+   group:"Personality",
+   cueText:"pinpoint what’s unclear → check with the right person → align\n\nsometimes only after starting → calculations, missing data → pull the questions together → ask around for resources\n\nor meant to be figured out by doing → pick an approach, try it → early results → share to confirm direction",
+   fullText:"If something isn’t clear to me when I get the task, I would first pinpoint what is unclear, and check back with the right person to make sure we’re aligned.\n\nBut sometimes you only realize what’s unclear after you’ve started working on it. For example, you might start doing the calculations and then realize you’re missing some data. In that case, I’ll pull together the points I’m unsure about, and ask around the team to see if anyone has the resources for it.\n\nAnd if those things are meant to be figured out through the task itself, I’ll pick an approach and give it a try. I want to get some early results, so I can share them with my manager or teammates to see if I’m heading in the right direction."},
+  {id:"amslg397mtw41",
+   title:"How do you handle negative or conflicting feedback?",
+   group:"Personality",
+   cueText:"negative feedback → main intention improve → opportunity to get better → not clear why or how → follow-up questions → think how to help\n\nfeedback conflicts → overall goal of project → which supports goal better → two different people → share with manager what each said → discuss which perspective",
+   fullText:"I think when someone gives you negative feedback, their main intention is they want you to improve something. So I try to see it as an opportunity to get better. If I’m not clear on why they want me to change something or how exactly I should change it, I’ll ask some follow-up questions and then think about how I can help.\n\nWhen feedback conflicts, I look at the overall goal of the project and figure out which feedback supports that goal better. For example, if I get conflicting feedback from two different people, I’ll share with my manager what each person said, and then we can discuss which perspective makes more sense to follow."}
+];
+const BUILTIN_IDS=new Set(BUILTIN_CARDS.map(x=>String((x&&x.id)||'')).filter(Boolean));
+// Add the bank's cards on every load, but only the ones that are neither already
+// here nor deleted on purpose. Editing a seeded card is therefore safe: it is
+// present, so it is never re-added and never overwritten.
+function seedBuiltins(){
+  if(!BUILTIN_CARDS.length)return false;
+  if(!Array.isArray(state.builtinGone))state.builtinGone=[];
+  const gone=new Set(state.builtinGone);
+  const have=new Set(state.answers.map(x=>x.id));
+  let added=0;
+  BUILTIN_CARDS.forEach(src=>{
+    const id=String((src&&src.id)||'').trim();
+    if(!id||have.has(id)||gone.has(id))return;
+    const g=String(src.group||'').trim();
+    state.answers.push(packEntry(Object.assign({},src,{
+      id:id,title:String(src.title||'（未命名）'),group:g
+    })));
+    if(g&&state.groups.indexOf(g)<0)state.groups.push(g);
+    have.add(id);added++;
+  });
+  return added>0;
+}
+
+// The bank's cards were first written into lettered staging groups (A…J).
+// Cards already on this device keep their id, so the bank would skip them and
+// nothing would appear to change: move them into the bank's real groups once,
+// keeping every local edit, review count and favourite. Runs a single time.
+const STAGE_GROUPS=['A','B','C','D','E','F','G','H','I','J'];
+function regroupBuiltins(){
+  if(state.builtinRegroup>=1)return false;
+  state.builtinRegroup=1;
+  if(!BUILTIN_CARDS.length)return true;
+  const want=new Map(BUILTIN_CARDS.map(x=>[String(x.id||''),String(x.group||'').trim()]));
+  state.answers.forEach(a=>{
+    const g=want.get(a.id);
+    if(!g)return;
+    const cur=(a.group||'').trim();
+    if(cur===g)return;
+    // only the staging groups and 未分组 are claimed; a card the user filed
+    // somewhere real stays where it was put
+    if(cur&&STAGE_GROUPS.indexOf(cur)<0)return;
+    a.group=g;
+  });
+  BUILTIN_CARDS.forEach(x=>{
+    const g=String(x.group||'').trim();
+    if(g&&state.groups.indexOf(g)<0)state.groups.push(g);
+  });
+  // drop the staging groups once nothing is left in them
+  state.groups=state.groups.filter(g=>STAGE_GROUPS.indexOf(g)<0
+    ||state.answers.some(a=>(a.group||'').trim()===g));
+  // and start 抽背 scoped to the bank rather than to every card on the device
+  if(state.quiz&&Array.isArray(state.quiz.scope)&&!state.quiz.scope.length){
+    const gs=[];
+    BUILTIN_CARDS.forEach(x=>{
+      const g=String(x.group||'').trim();
+      if(g&&gs.indexOf(g)<0)gs.push(g);
+    });
+    if(gs.length)state.quiz.scope=gs;
+  }
+  return true;
+}
 
 function seedData(){
   return [{
@@ -956,10 +1279,26 @@ function load(){
       if(Array.isArray(d.groups))state.groups=d.groups;
       if(Array.isArray(d.folders))state.folders=d.folders;
       if(d.groupFolder&&typeof d.groupFolder==='object')state.groupFolder=d.groupFolder;
-      if('openFolder'in d)state.openFolder=d.openFolder;}
+      if('openFolder'in d)state.openFolder=d.openFolder;
+      if(Array.isArray(d.builtinGone))state.builtinGone=d.builtinGone.filter(x=>typeof x==='string');
+      if(typeof d.builtinRegroup==='number')state.builtinRegroup=d.builtinRegroup;
+      if(d.quiz&&typeof d.quiz==='object'){
+        const q=d.quiz;
+        state.quiz={
+          scope:Array.isArray(q.scope)?q.scope.filter(x=>typeof x==='string'):[],
+          done:(q.done&&typeof q.done==='object')?q.done:{},
+          round:(q.round&&typeof q.round==='object')?q.round:{},
+          cur:typeof q.cur==='string'?q.cur:null,
+          stage:(q.stage===1||q.stage===2)?q.stage:0
+        };
+      }}
   }catch(e){}
-  if(!state.answers.length&&!state.daily.length)state.answers=seedData();
+  // the demo card is a first-run placeholder; a real built-in bank replaces it
+  if(!state.answers.length&&!state.daily.length&&!BUILTIN_CARDS.length)state.answers=seedData();
   migratePhrasebooks();
+  // seed before the selection fix below, or a fresh install with a bank but no
+  // saved data would end up with cards and nothing selected
+  if(seedBuiltins()|regroupBuiltins())save();
   syncGroups();
   if(state.selectedId!=='__daily__'&&(!state.selectedId||!state.answers.find(a=>a.id===state.selectedId)))
     state.selectedId=state.answers[0]?state.answers[0].id:(state.daily.length?'__daily__':null);
@@ -969,7 +1308,7 @@ function load(){
   }
 }
 function save(){
-  try{localStorage.setItem(LS_KEY,JSON.stringify({answers:state.answers,selectedId:state.selectedId,showZh:state.showZh,openGroup:state.openGroup,pbShowZh:state.pbShowZh,pbFavOnly:state.pbFavOnly,pbMode:state.pbMode,daily:state.daily,dailyOpen:state.dailyOpen,appTitle:state.appTitle,groupOrder:state.groupOrder,groups:state.groups,folders:state.folders,groupFolder:state.groupFolder,openFolder:state.openFolder}));}catch(e){}
+  try{localStorage.setItem(LS_KEY,JSON.stringify({answers:state.answers,selectedId:state.selectedId,showZh:state.showZh,openGroup:state.openGroup,pbShowZh:state.pbShowZh,pbFavOnly:state.pbFavOnly,pbMode:state.pbMode,daily:state.daily,dailyOpen:state.dailyOpen,appTitle:state.appTitle,groupOrder:state.groupOrder,groups:state.groups,folders:state.folders,groupFolder:state.groupFolder,openFolder:state.openFolder,quiz:state.quiz,builtinGone:state.builtinGone,builtinRegroup:state.builtinRegroup}));}catch(e){}
 }
 
 /* ============================================================
@@ -1794,10 +2133,127 @@ function renderDailyBoard(){
   if(typeof markCached==='function')markCached();
 }
 
-function renderMain(){  if(typeof markCached==='function')markCached();
+/* ============================================================
+   抽背
+   ============================================================ */
+function quizScopeKey(){
+  const s=(state.quiz.scope||[]).slice().sort();
+  return s.length?s.join('\u241f'):'__all__';
+}
+function quizTitled(a){return !!String(a.title||'').trim();}
+function quizGroups(){
+  const names=allGroups().filter(g=>state.answers.some(a=>groupOf(a)===g&&quizTitled(a)));
+  if(state.answers.some(a=>groupOf(a)===UNGROUPED&&quizTitled(a))&&names.indexOf(UNGROUPED)<0)
+    names.push(UNGROUPED);
+  return names;
+}
+function quizPool(){
+  const sc=state.quiz.scope||[];
+  return state.answers.filter(a=>quizTitled(a)&&(!sc.length||sc.indexOf(groupOf(a))>=0));
+}
+function quizDone(){
+  const k=quizScopeKey();
+  if(!Array.isArray(state.quiz.done[k]))state.quiz.done[k]=[];
+  return state.quiz.done[k];
+}
+function quizRound(){return state.quiz.round[quizScopeKey()]||1;}
+function quizRemaining(){
+  const done=new Set(quizDone());
+  return quizPool().filter(a=>!done.has(a.id));
+}
+function quizDraw(){
+  const rest=quizRemaining();
+  if(!rest.length){state.quiz.cur=null;state.quiz.stage=0;save();renderMain();return;}
+  const pick=rest[Math.floor(Math.random()*rest.length)];
+  quizDone().push(pick.id);
+  state.quiz.cur=pick.id;state.quiz.stage=0;
+  save();renderMain();
+}
+function quizNewRound(){
+  const k=quizScopeKey();
+  state.quiz.done[k]=[];
+  state.quiz.round[k]=quizRound()+1;
+  quizDraw();
+}
+function renderQuiz(){
+  const pool=quizPool();
+  const sc=state.quiz.scope||[];
+  let chips='<button class="chip'+(sc.length?'':' on')+'" data-g="__all__">全部</button>';
+  quizGroups().forEach(g=>{
+    const n=state.answers.filter(a=>groupOf(a)===g&&quizTitled(a)).length;
+    chips+='<button class="chip'+(sc.indexOf(g)>=0?' on':'')+'" data-g="'+escAttr(g)+'">'
+      +escHtml(g)+' <span style="opacity:.6">'+n+'</span></button>';
+  });
+  // cards deleted since the last round should not count toward the total
+  const poolIds=new Set(pool.map(a=>a.id));
+  const doneN=quizDone().filter(id=>poolIds.has(id)).length;
+  const cur=state.quiz.cur?state.answers.find(a=>a.id===state.quiz.cur&&quizTitled(a)):null;
+  if(state.quiz.cur&&!cur)state.quiz.cur=null;
+  let meta='',qHtml='',acts='',body='';
+  if(!pool.length){
+    meta='这个范围里没有卡片';
+    qHtml='<p class="quiz-note">先到卡片库里加几张，或者换一个分组。</p>';
+  }else{
+    meta='第 '+quizRound()+' 轮 · '+doneN+' / '+pool.length;
+    if(cur){
+      const hasCue=!!String(cur.cueText||'').trim();
+      const hasFull=!!String(cur.fullText||'').trim();
+      const st=state.quiz.stage;
+      qHtml='<h1 class="quiz-q">'+escHtml(cur.title)+'</h1>';
+      const cueOff=(st>=1||!hasCue)?' disabled':'';
+      const fullOff=(st>=2||!hasFull||(st<1&&hasCue))?' disabled':'';
+      acts='<button class="btn" id="qCue"'+cueOff+'>关键词提示</button>'
+        +'<button class="btn" id="qFull"'+fullOff+'>展开回答全文</button>'
+        +'<button class="btn primary" id="qNext">下一题</button>';
+      if(st>=1&&hasCue)
+        body+='<div class="cuebox"><span class="cue-lab">关键词</span>'+spacesToHtml(cur.cueText.trim())+'</div>';
+      if(st>=2&&hasFull){
+        const parsed=parseCuts(cur.fullText||'');
+        body+='<div class="card" id="practiceCard">'
+          +renderFull(parsed.text,parsed.cuts,{set:new Set(cur.sentFavs||[]),only:false},
+                      parseIpa(cur.ipaText||''),alignTrans(parsed.text,cur.transText||''))
+          +'</div>';
+      }
+    }else if(quizRemaining().length){
+      qHtml='<p class="quiz-note">这一轮还剩 '+quizRemaining().length+' 题。</p>';
+      acts='<button class="btn primary" id="qStart">'+(doneN?'接着抽':'开始抽背')+'</button>';
+    }else{
+      qHtml='<p class="quiz-note">这一轮 '+pool.length+' 题已经全部抽完。</p>';
+      acts='<button class="btn primary" id="qRound">开始下一轮</button>';
+    }
+  }
+  mainInner.innerHTML='<div class="quiz-scope">'+chips+'</div>'
+    +'<div class="quiz-meta">'+escHtml(meta)+'</div>'+qHtml
+    +'<div class="quiz-acts">'+acts+'</div>'+body;
+  mainInner.querySelectorAll('.quiz-scope .chip').forEach(b=>{
+    b.onclick=()=>{
+      const g=b.dataset.g;
+      if(g==='__all__')state.quiz.scope=[];
+      else{
+        const s=(state.quiz.scope||[]).slice(),i=s.indexOf(g);
+        if(i>=0)s.splice(i,1);else s.push(g);
+        state.quiz.scope=s;
+      }
+      // progress is kept per scope, but the question on screen belongs to the old one
+      state.quiz.cur=null;state.quiz.stage=0;
+      save();renderMain();
+    };
+  });
+  const on=(id,fn)=>{const el=document.getElementById(id);if(el)el.onclick=fn;};
+  on('qCue',()=>{state.quiz.stage=1;save();renderMain();});
+  on('qFull',()=>{state.quiz.stage=2;save();renderMain();});
+  on('qNext',quizDraw);
+  on('qStart',quizDraw);
+  on('qRound',quizNewRound);
+  if(typeof markCached==='function')markCached();
+  if(cur)bindCardInteractions(document.getElementById('practiceCard'),cur);
 }
 
 function renderMain(){
+  const vt=document.getElementById('viewToggle');
+  if(vt)vt.textContent=state.view==='quiz'?'卡片库':'抽背';
+  document.body.classList.toggle('quiz-mode',state.view==='quiz');
+  if(state.view==='quiz'){renderQuiz();return;}
   if(state.selectedId==='__daily__'){
     if(state.dailyOpen){
       const e=state.daily.find(x=>x.id===state.dailyOpen);
@@ -1880,8 +2336,15 @@ function renderCardView(a,isDaily){
 
   // card interactions (delegated)
   if(typeof markCached==='function')markCached();
-  const card=document.getElementById('practiceCard');
-  if(card){
+  bindCardInteractions(document.getElementById('practiceCard'),a);
+}
+
+// Everything a rendered practice card responds to: ♪ playback, ☆ per-segment
+// favourites, the reveal dot, blanks, IPA and pinned meanings. Split out of
+// renderCardView so any screen that renders a card gets the same behaviour.
+function bindCardInteractions(card,a){
+  if(!card)return;
+  {
     /* the per-sentence dot cycles 0 masked -> 1 meanings -> 2 原文 -> 0 */
     const dotBlanks=s=>card.querySelectorAll('.blank[data-s="'+s+'"]');
     const dotZh=s=>card.querySelectorAll('.bw.zh1[data-s="'+s+'"][data-zh]:not([data-zh=""])');
@@ -2088,6 +2551,8 @@ function deleteAnswer(id,skipConfirm){
   const a=state.answers.find(x=>x.id===id);if(!a)return;
   if(!skipConfirm&&!confirm('删除「'+(a.title||'未命名')+'」？此操作无法撤销。'))return;
   state.answers=state.answers.filter(x=>x.id!==id);
+  // otherwise the built-in bank would put it straight back on the next load
+  if(BUILTIN_IDS.has(id)&&state.builtinGone.indexOf(id)<0)state.builtinGone.push(id);
   if(state.selectedId===id)state.selectedId=state.answers[0]?state.answers[0].id:null;
   save();renderAll();
 }
@@ -2872,6 +3337,10 @@ document.getElementById('listToggle').onclick=function(){
   const side=document.querySelector('.side');
   const open=side.classList.toggle('open');
   this.setAttribute('aria-expanded',open?'true':'false');
+};
+document.getElementById('viewToggle').onclick=()=>{
+  state.view=state.view==='quiz'?'edit':'quiz';
+  renderAll();
 };
 load();applyTitle();renderAll();
 </script>
