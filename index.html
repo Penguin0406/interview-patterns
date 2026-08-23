@@ -310,6 +310,15 @@
     line-height:1.3;cursor:pointer;transition:all .14s;}
   .quiz-scope .chip:hover{border-color:var(--faint);color:var(--ink);}
   .quiz-scope .chip.on{background:var(--ink);border-color:var(--ink);color:var(--on-ink-fg);}
+  .quiz-batch{display:flex;align-items:center;gap:2px;background:var(--well);
+    border-radius:20px;padding:3px 4px;font-family:var(--sans);}
+  .quiz-batch .lab{font-size:calc(12px * var(--fs));color:var(--muted);padding:0 4px 0 8px;}
+  .quiz-batch button{border:none;background:none;color:var(--muted);cursor:pointer;
+    font-size:calc(14px * var(--fs));line-height:1;padding:4px 9px;border-radius:14px;}
+  .quiz-batch button:hover{color:var(--ink);background:var(--hover);}
+  .quiz-batch input{width:calc(44px * var(--fs));border:none;background:none;text-align:center;
+    font-family:var(--mono);font-size:calc(12.5px * var(--fs));color:var(--ink);padding:2px 0;}
+  .quiz-batch input:focus{outline:none;background:var(--card);border-radius:6px;}
   .quiz-meta{font-family:var(--mono);font-size:calc(11.5px * var(--fs));color:var(--muted);
     letter-spacing:.06em;margin-bottom:10px;}
   .quiz-q{font-family:var(--serif);font-weight:600;font-size:calc(30px * var(--fs));
@@ -910,8 +919,10 @@ function bestAlignment(text,lits){
 const LS_KEY='interview_practice_v1';
 const DEF_TITLE='流畅表达任何事';
 let state={answers:[],selectedId:null,view:'quiz',quiz:null,builtinGone:[],builtinRegroup:0,mode:'full',showZh:false,revealAll:false,revealZh:false,pbRevealAll:false,openGroup:null,pbShowZh:false,pbFavOnly:false,pbMode:'pattern',daily:[],dailyOpen:null,appTitle:DEF_TITLE,favOnlySent:false,groupOrder:[],groups:[],folders:[],groupFolder:{},openFolder:null};
-// 抽背进度：done / round 按资源库（已选分组的组合）分开记
-function blankQuiz(){return {scope:[],done:{},round:{},cur:null,stage:0};}
+// 抽背进度：done / round / size / bat 都按资源库（已选分组的组合）分开记。
+// done 是本轮抽过的顺序，at 是当前看的是其中第几题（等于 done.length 时
+// 表示停在提示页，而不是某一题），bat 记当前这一批从哪里开始。
+function blankQuiz(){return {scope:[],done:{},round:{},size:{},bat:{},at:0,cur:null,stage:0};}
 state.quiz=blankQuiz();
 
 function uid(){return 'a'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
@@ -1288,9 +1299,18 @@ function load(){
           scope:Array.isArray(q.scope)?q.scope.filter(x=>typeof x==='string'):[],
           done:(q.done&&typeof q.done==='object')?q.done:{},
           round:(q.round&&typeof q.round==='object')?q.round:{},
+          size:(q.size&&typeof q.size==='object')?q.size:{},
+          bat:(q.bat&&typeof q.bat==='object')?q.bat:{},
+          at:typeof q.at==='number'?q.at:null,
           cur:typeof q.cur==='string'?q.cur:null,
           stage:(q.stage===1||q.stage===2)?q.stage:0
         };
+        // saved before batches existed: place the pointer on the card it was showing
+        if(state.quiz.at===null){
+          const list=state.quiz.done[quizScopeKey()];
+          const i=Array.isArray(list)?list.indexOf(state.quiz.cur):-1;
+          state.quiz.at=i>=0?i:(Array.isArray(list)?list.length:0);
+        }
       }}
   }catch(e){}
   // the demo card is a first-run placeholder; a real built-in bank replaces it
@@ -2161,21 +2181,92 @@ function quizRemaining(){
   const done=new Set(quizDone());
   return quizPool().filter(a=>!done.has(a.id));
 }
+// 0 = 一批就是全部
+function quizSize(){
+  const n=state.quiz.size[quizScopeKey()];
+  return (typeof n==='number'&&isFinite(n)&&n>0)?Math.floor(n):0;
+}
+function quizBat(){
+  const k=quizScopeKey();
+  let b=state.quiz.bat[k];
+  if(!b||typeof b!=='object'||typeof b.start!=='number'){
+    b={start:0,size:quizSize(),no:1};
+    state.quiz.bat[k]=b;
+  }
+  return b;
+}
+// how many this batch is aiming for: its own size when it started, but never
+// more than what is actually left in the round
+function quizBatchTarget(){
+  const b=quizBat(),inB=quizDone().length-b.start,left=quizRemaining().length;
+  const want=b.size>0?b.size:Infinity;
+  return Math.min(want,inB+left);
+}
+function quizBatchFull(){return quizDone().length-quizBat().start>=quizBatchTarget();}
+// cards deleted since they were drawn would leave holes in done: close them and
+// slide the batch start and the pointer by the same amount
+function quizPrune(){
+  const ids=new Set(quizPool().map(a=>a.id));
+  const done=quizDone(),b=quizBat();
+  if(done.every(id=>ids.has(id)))return;
+  let start=b.start,at=state.quiz.at,out=[];
+  for(let i=0;i<done.length;i++){
+    if(ids.has(done[i]))out.push(done[i]);
+    else{if(i<b.start)start--;if(i<state.quiz.at)at--;}
+  }
+  state.quiz.done[quizScopeKey()]=out;
+  b.start=Math.max(0,Math.min(start,out.length));
+  state.quiz.at=Math.max(b.start,Math.min(at,out.length));
+}
 function quizDraw(){
-  const rest=quizRemaining();
-  if(!rest.length){state.quiz.cur=null;state.quiz.stage=0;save();renderMain();return;}
+  const rest=quizRemaining(),done=quizDone();
+  if(!rest.length||quizBatchFull()){
+    state.quiz.at=done.length;state.quiz.stage=0;save();renderMain();return;
+  }
   const pick=rest[Math.floor(Math.random()*rest.length)];
-  quizDone().push(pick.id);
-  state.quiz.cur=pick.id;state.quiz.stage=0;
+  done.push(pick.id);
+  state.quiz.at=done.length-1;state.quiz.stage=0;
   save();renderMain();
+}
+// 下一题：回看过之后先把看过的那几题往前翻完，到最新一题才抽新的
+function quizNext(){
+  const done=quizDone();
+  if(state.quiz.at<done.length-1){
+    state.quiz.at++;state.quiz.stage=0;save();renderMain();return;
+  }
+  quizDraw();
+}
+// 上一题：只在当前这一批里翻，翻不回上一批
+function quizPrev(){
+  const b=quizBat(),done=quizDone();
+  const at=Math.min(state.quiz.at,done.length);
+  if(at<=b.start)return;
+  state.quiz.at=at-1;state.quiz.stage=0;save();renderMain();
+}
+function quizNextBatch(){
+  const b=quizBat();
+  b.start=quizDone().length;b.size=quizSize();b.no=(b.no||1)+1;
+  quizDraw();
 }
 function quizNewRound(){
   const k=quizScopeKey();
   state.quiz.done[k]=[];
   state.quiz.round[k]=quizRound()+1;
+  state.quiz.bat[k]={start:0,size:quizSize(),no:1};
   quizDraw();
 }
+function setQuizSize(n){
+  const pool=quizPool().length,k=quizScopeKey();
+  n=Math.max(1,Math.min(pool||1,Math.floor(n)||1));
+  state.quiz.size[k]=(n>=pool)?0:n;
+  // a batch that has not started yet takes the new number immediately;
+  // one already under way keeps its own until it ends
+  const b=quizBat();
+  if(quizDone().length===b.start)b.size=quizSize();
+  save();renderMain();
+}
 function renderQuiz(){
+  quizPrune();
   const pool=quizPool();
   const sc=state.quiz.scope||[];
   let chips='<button class="chip'+(sc.length?'':' on')+'" data-g="__all__">全部</button>';
@@ -2184,17 +2275,26 @@ function renderQuiz(){
     chips+='<button class="chip'+(sc.indexOf(g)>=0?' on':'')+'" data-g="'+escAttr(g)+'">'
       +escHtml(g)+' <span style="opacity:.6">'+n+'</span></button>';
   });
-  // cards deleted since the last round should not count toward the total
-  const poolIds=new Set(pool.map(a=>a.id));
-  const doneN=quizDone().filter(id=>poolIds.has(id)).length;
-  const cur=state.quiz.cur?state.answers.find(a=>a.id===state.quiz.cur&&quizTitled(a)):null;
-  if(state.quiz.cur&&!cur)state.quiz.cur=null;
+  const size=quizSize();
+  const bsz='<div class="quiz-batch"><span class="lab">每批</span>'
+    +'<button id="bszDn" aria-label="减少">−</button>'
+    +'<input id="bszVal" type="text" inputmode="numeric" value="'+(size?size:'全部')+'" aria-label="每批题数">'
+    +'<button id="bszUp" aria-label="增加">+</button></div>';
+  const done=quizDone(),b=quizBat();
+  const doneN=done.length;
+  const at=Math.max(b.start,Math.min(state.quiz.at,done.length));
+  state.quiz.at=at;
+  const cur=at<done.length?state.answers.find(a=>a.id===done[at]):null;
+  state.quiz.cur=cur?cur.id:null;
+  const inB=done.length-b.start,target=quizBatchTarget();
   let meta='',qHtml='',acts='',body='';
   if(!pool.length){
     meta='这个范围里没有卡片';
     qHtml='<p class="quiz-note">先到卡片库里加几张，或者换一个分组。</p>';
   }else{
-    meta='第 '+quizRound()+' 轮 · '+doneN+' / '+pool.length;
+    meta='第 '+quizRound()+' 轮';
+    if(size)meta+=' · 第 '+(b.no||1)+' 批 '+Math.min(at-b.start+(cur?1:0),inB)+' / '+target;
+    meta+=' · 本轮 '+doneN+' / '+pool.length;
     if(cur){
       const hasCue=!!String(cur.cueText||'').trim();
       const hasFull=!!String(cur.fullText||'').trim();
@@ -2202,7 +2302,8 @@ function renderQuiz(){
       qHtml='<h1 class="quiz-q">'+escHtml(cur.title)+'</h1>';
       const cueOff=(st>=1||!hasCue)?' disabled':'';
       const fullOff=(st>=2||!hasFull||(st<1&&hasCue))?' disabled':'';
-      acts='<button class="btn" id="qCue"'+cueOff+'>关键词提示</button>'
+      acts='<button class="btn" id="qPrev"'+(at>b.start?'':' disabled')+'>上一题</button>'
+        +'<button class="btn" id="qCue"'+cueOff+'>关键词提示</button>'
         +'<button class="btn" id="qFull"'+fullOff+'>展开回答全文</button>'
         +'<button class="btn primary" id="qNext">下一题</button>';
       if(st>=1&&hasCue)
@@ -2214,15 +2315,21 @@ function renderQuiz(){
                       parseIpa(cur.ipaText||''),alignTrans(parsed.text,cur.transText||''))
           +'</div>';
       }
-    }else if(quizRemaining().length){
-      qHtml='<p class="quiz-note">这一轮还剩 '+quizRemaining().length+' 题。</p>';
-      acts='<button class="btn primary" id="qStart">'+(doneN?'接着抽':'开始抽背')+'</button>';
     }else{
-      qHtml='<p class="quiz-note">这一轮 '+pool.length+' 题已经全部抽完。</p>';
-      acts='<button class="btn primary" id="qRound">开始下一轮</button>';
+      const back=inB>0?'<button class="btn" id="qPrev">上一题</button>':'';
+      if(!quizRemaining().length){
+        qHtml='<p class="quiz-note">这一轮 '+pool.length+' 题已经全部抽完。</p>';
+        acts=back+'<button class="btn primary" id="qRound">开始下一轮</button>';
+      }else if(inB>0&&inB>=target){
+        qHtml='<p class="quiz-note">这一批 '+inB+' 题抽完了，本轮还剩 '+quizRemaining().length+' 题。</p>';
+        acts=back+'<button class="btn primary" id="qBatch">下一批</button>';
+      }else{
+        qHtml='<p class="quiz-note">这一轮还剩 '+quizRemaining().length+' 题。</p>';
+        acts=back+'<button class="btn primary" id="qStart">'+(doneN?'接着抽':'开始抽背')+'</button>';
+      }
     }
   }
-  mainInner.innerHTML='<div class="quiz-scope">'+chips+'</div>'
+  mainInner.innerHTML='<div class="quiz-scope">'+chips+(pool.length?bsz:'')+'</div>'
     +'<div class="quiz-meta">'+escHtml(meta)+'</div>'+qHtml
     +'<div class="quiz-acts">'+acts+'</div>'+body;
   mainInner.querySelectorAll('.quiz-scope .chip').forEach(b=>{
@@ -2236,15 +2343,32 @@ function renderQuiz(){
       }
       // progress is kept per scope, but the question on screen belongs to the old one
       state.quiz.cur=null;state.quiz.stage=0;
+      state.quiz.at=(state.quiz.done[quizScopeKey()]||[]).length;
       save();renderMain();
     };
   });
   const on=(id,fn)=>{const el=document.getElementById(id);if(el)el.onclick=fn;};
   on('qCue',()=>{state.quiz.stage=1;save();renderMain();});
   on('qFull',()=>{state.quiz.stage=2;save();renderMain();});
-  on('qNext',quizDraw);
+  on('qNext',quizNext);
+  on('qPrev',quizPrev);
   on('qStart',quizDraw);
+  on('qBatch',quizNextBatch);
   on('qRound',quizNewRound);
+  on('bszDn',()=>setQuizSize((size||pool.length)-1));
+  on('bszUp',()=>setQuizSize((size||pool.length)+1));
+  const bv=document.getElementById('bszVal');
+  if(bv){
+    const apply=()=>{
+      const t=bv.value.trim();
+      if(!t||t==='\u5168\u90e8'){setQuizSize(pool.length);return;}
+      const n=parseInt(t,10);
+      if(isFinite(n))setQuizSize(n);else renderMain();
+    };
+    bv.onchange=apply;
+    bv.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();bv.blur();}};
+    bv.onfocus=()=>{if(bv.value==='\u5168\u90e8')bv.value='';bv.select();};
+  }
   if(typeof markCached==='function')markCached();
   if(cur)bindCardInteractions(document.getElementById('practiceCard'),cur);
 }
