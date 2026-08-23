@@ -595,11 +595,7 @@
 <div class="app">
   <aside class="side">
     <div class="side-head">
-      <div>
-        <div class="brand" id="brandTitle" title="点击修改标题">流畅表达任何事</div>
-        <div class="brand-sub">full · pattern · phrase</div>
-      </div>
-      <div style="display:flex;gap:8px;align-items:center;">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
         <span class="fsctl">
           <button class="fs-sm" id="fsDown" title="缩小字号" aria-label="缩小字号">A</button>
           <span class="fs-val" id="fsVal" title="点击恢复默认字号">100%</span>
@@ -607,7 +603,7 @@
         </span>
         <button class="btn ghost" id="ttsBtn" title="发音设置" aria-label="发音设置">⚙</button>
         <button class="btn ghost" id="themeToggle" title="切换浅色/深色" aria-label="切换浅色或深色模式">◐</button>
-        <button class="btn ghost" id="viewToggle" title="在抽背和卡片库之间切换">卡片库</button>
+        <button class="btn ghost" id="viewToggle" title="在抽背和卡片库之间切换" aria-label="在抽背和卡片库之间切换">⚄</button>
         <button class="btn ghost" id="listToggle" aria-expanded="false">卡片列表 <span class="lt-chev">⌄</span></button>
       </div>
     </div>
@@ -616,6 +612,7 @@
       <button class="btn ghost" id="newFolderBtn">+ 文件夹</button>
       <button class="btn ghost" id="importBtn">导入</button>
       <button class="btn ghost" id="exportBtn">导出</button>
+      <button class="btn ghost" id="exportHtmlBtn" title="导出一份把当前内容写死为默认数据的 HTML">导出 HTML</button>
       <input type="file" id="importFile" accept="application/json" hidden>
     </div>
     <div class="qlist" id="qlist"></div>
@@ -650,6 +647,11 @@
       <button class="btn ghost" id="ttsClose" aria-label="关闭">✕</button>
     </div>
     <div class="modal-body">
+      <div class="field">
+        <label>页面标题</label>
+        <div class="desc">只影响浏览器标签页和备份文件名。</div>
+        <input class="f" id="tAppTitle" placeholder="流畅表达任何事">
+      </div>
       <div class="field">
         <label>API Key</label>
         <div class="desc">仅保存在本机浏览器，不会写入文件或上传到其他地方。</div>
@@ -936,6 +938,7 @@ function uid(){return 'a'+Date.now().toString(36)+Math.random().toString(36).sli
    它是「这条已经种过 / 已被我删掉」的凭据。新版本里新增的条目
    会在下次打开时自动补进来，已经改过的卡片不会被覆盖。
    ============================================================ */
+/* ==== BUILTIN DATA START (「导出 HTML」会整段重写这里，不要手改格式) ==== */
 const BUILTIN_CARDS=[
   {id:"amsddkydqxgtf",
    title:"Content Library Organization",
@@ -1158,6 +1161,10 @@ const BUILTIN_CARDS=[
    cueText:"negative feedback → main intention improve → opportunity to get better → not clear why or how → follow-up questions → think how to help\n\nfeedback conflicts → overall goal of project → which supports goal better → two different people → share with manager what each said → discuss which perspective",
    fullText:"I think when someone gives you negative feedback, their main intention is they want you to improve something. So I try to see it as an opportunity to get better. If I’m not clear on why they want me to change something or how exactly I should change it, I’ll ask some follow-up questions and then think about how I can help.\n\nWhen feedback conflicts, I look at the overall goal of the project and figure out which feedback supports that goal better. For example, if I get conflicting feedback from two different people, I’ll share with my manager what each person said, and then we can discuss which perspective makes more sense to follow."}
 ];
+const BUILTIN_DAILY=[];
+const BUILTIN_SCOPE=[];
+const BUILTIN_LAYOUT={title:'',groups:[],folders:[],groupFolder:{}};
+/* ==== BUILTIN DATA END ==== */
 const BUILTIN_IDS=new Set(BUILTIN_CARDS.map(x=>String((x&&x.id)||'')).filter(Boolean));
 // Add the bank's cards on every load, but only the ones that are neither already
 // here nor deleted on purpose. Editing a seeded card is therefore safe: it is
@@ -1177,6 +1184,21 @@ function seedBuiltins(){
     })));
     if(g&&state.groups.indexOf(g)<0)state.groups.push(g);
     have.add(id);added++;
+  });
+  const haveD=new Set(state.daily.map(x=>x.id));
+  BUILTIN_DAILY.forEach(src=>{
+    const id=String((src&&src.id)||'').trim();
+    if(!id||haveD.has(id)||gone.has(id))return;
+    state.daily.push(packDaily(Object.assign({},src,{id:id})));
+    haveD.add(id);added++;
+  });
+  // the bank also carries the shape of the sidebar: append anything missing,
+  // never reorder what is already here
+  if(BUILTIN_LAYOUT.title&&state.appTitle===DEF_TITLE)state.appTitle=BUILTIN_LAYOUT.title;
+  (BUILTIN_LAYOUT.groups||[]).forEach(g=>{if(g&&state.groups.indexOf(g)<0)state.groups.push(g);});
+  (BUILTIN_LAYOUT.folders||[]).forEach(f=>{if(f&&state.folders.indexOf(f)<0)state.folders.push(f);});
+  Object.keys(BUILTIN_LAYOUT.groupFolder||{}).forEach(g=>{
+    if(!(g in state.groupFolder))state.groupFolder[g]=BUILTIN_LAYOUT.groupFolder[g];
   });
   return added>0;
 }
@@ -1208,10 +1230,10 @@ function regroupBuiltins(){
   // drop the staging groups once nothing is left in them
   state.groups=state.groups.filter(g=>STAGE_GROUPS.indexOf(g)<0
     ||state.answers.some(a=>(a.group||'').trim()===g));
-  // and start 抽背 scoped to the bank rather than to every card on the device
+  // and start 抽背 scoped the way the bank says, rather than to every card here
   if(state.quiz&&Array.isArray(state.quiz.scope)&&!state.quiz.scope.length){
-    const gs=[];
-    BUILTIN_CARDS.forEach(x=>{
+    let gs=BUILTIN_SCOPE.slice();
+    if(!gs.length)BUILTIN_CARDS.forEach(x=>{
       const g=String(x.group||'').trim();
       if(g&&gs.indexOf(g)<0)gs.push(g);
     });
@@ -2160,7 +2182,19 @@ function quizScopeKey(){
   const s=(state.quiz.scope||[]).slice().sort();
   return s.length?s.join('\u241f'):'__all__';
 }
+const QDAILY='__daily__';
 function quizTitled(a){return !!String(a.title||'').trim();}
+function quizIsDaily(){return (state.quiz.scope||[]).indexOf(QDAILY)>=0;}
+// a daily entry is worth asking when it has a Chinese side or any text at all
+function dailyAskable(e){return !!(String(e.zh||'').trim()||String(e.fullText||'').trim());}
+// 日常用语的题面是中文，和板块上看中文回忆原文一致
+function quizAsk(x){
+  if(!quizIsDaily())return String(x.title||'（未命名）');
+  return String(x.zh||'').trim()||dailyTitle(x);
+}
+function quizFind(id){
+  return (quizIsDaily()?state.daily:state.answers).find(x=>x.id===id)||null;
+}
 function quizGroups(){
   const names=allGroups().filter(g=>state.answers.some(a=>groupOf(a)===g&&quizTitled(a)));
   if(state.answers.some(a=>groupOf(a)===UNGROUPED&&quizTitled(a))&&names.indexOf(UNGROUPED)<0)
@@ -2168,6 +2202,7 @@ function quizGroups(){
   return names;
 }
 function quizPool(){
+  if(quizIsDaily())return state.daily.filter(dailyAskable);
   const sc=state.quiz.scope||[];
   return state.answers.filter(a=>quizTitled(a)&&(!sc.length||sc.indexOf(groupOf(a))>=0));
 }
@@ -2269,12 +2304,17 @@ function renderQuiz(){
   quizPrune();
   const pool=quizPool();
   const sc=state.quiz.scope||[];
+  const isD=quizIsDaily();
   let chips='<button class="chip'+(sc.length?'':' on')+'" data-g="__all__">全部</button>';
   quizGroups().forEach(g=>{
     const n=state.answers.filter(a=>groupOf(a)===g&&quizTitled(a)).length;
-    chips+='<button class="chip'+(sc.indexOf(g)>=0?' on':'')+'" data-g="'+escAttr(g)+'">'
+    chips+='<button class="chip'+(!isD&&sc.indexOf(g)>=0?' on':'')+'" data-g="'+escAttr(g)+'">'
       +escHtml(g)+' <span style="opacity:.6">'+n+'</span></button>';
   });
+  // 日常用语自成一个资源库，选了它就不混卡片
+  const nd=state.daily.filter(dailyAskable).length;
+  if(nd)chips+='<button class="chip'+(isD?' on':'')+'" data-g="'+QDAILY+'">日常用语'
+    +' <span style="opacity:.6">'+nd+'</span></button>';
   const size=quizSize();
   const bsz='<div class="quiz-batch"><span class="lab">每批</span>'
     +'<button id="bszDn" aria-label="减少">−</button>'
@@ -2284,7 +2324,7 @@ function renderQuiz(){
   const doneN=done.length;
   const at=Math.max(b.start,Math.min(state.quiz.at,done.length));
   state.quiz.at=at;
-  const cur=at<done.length?state.answers.find(a=>a.id===done[at]):null;
+  const cur=at<done.length?quizFind(done[at]):null;
   state.quiz.cur=cur?cur.id:null;
   const inB=done.length-b.start,target=quizBatchTarget();
   let meta='',qHtml='',acts='',body='';
@@ -2299,12 +2339,12 @@ function renderQuiz(){
       const hasCue=!!String(cur.cueText||'').trim();
       const hasFull=!!String(cur.fullText||'').trim();
       const st=state.quiz.stage;
-      qHtml='<h1 class="quiz-q">'+escHtml(cur.title)+'</h1>';
+      qHtml='<h1 class="quiz-q">'+escHtml(quizAsk(cur))+'</h1>';
       const cueOff=(st>=1||!hasCue)?' disabled':'';
       const fullOff=(st>=2||!hasFull||(st<1&&hasCue))?' disabled':'';
       acts='<button class="btn" id="qPrev"'+(at>b.start?'':' disabled')+'>上一题</button>'
-        +'<button class="btn" id="qCue"'+cueOff+'>关键词提示</button>'
-        +'<button class="btn" id="qFull"'+fullOff+'>展开回答全文</button>'
+        +'<button class="btn" id="qCue"'+cueOff+'>关键词</button>'
+        +'<button class="btn" id="qFull"'+fullOff+'>回答全文</button>'
         +'<button class="btn primary" id="qNext">下一题</button>';
       if(st>=1&&hasCue)
         body+='<div class="cuebox"><span class="cue-lab">关键词</span>'+spacesToHtml(cur.cueText.trim())+'</div>';
@@ -2336,8 +2376,10 @@ function renderQuiz(){
     b.onclick=()=>{
       const g=b.dataset.g;
       if(g==='__all__')state.quiz.scope=[];
+      else if(g===QDAILY)state.quiz.scope=quizIsDaily()?[]:[QDAILY];
       else{
-        const s=(state.quiz.scope||[]).slice(),i=s.indexOf(g);
+        // picking a group leaves the daily pool, the two never mix
+        const s=(quizIsDaily()?[]:(state.quiz.scope||[])).slice(),i=s.indexOf(g);
         if(i>=0)s.splice(i,1);else s.push(g);
         state.quiz.scope=s;
       }
@@ -2375,7 +2417,12 @@ function renderQuiz(){
 
 function renderMain(){
   const vt=document.getElementById('viewToggle');
-  if(vt)vt.textContent=state.view==='quiz'?'卡片库':'抽背';
+  if(vt){
+    // single glyph: the sidebar header is narrow and the label used to wrap it
+    vt.textContent=state.view==='quiz'?'☰':'⚄';
+    vt.title=state.view==='quiz'?'回到卡片库':'去抽背';
+    vt.setAttribute('aria-label',vt.title);
+  }
   document.body.classList.toggle('quiz-mode',state.view==='quiz');
   if(state.view==='quiz'){renderQuiz();return;}
   if(state.selectedId==='__daily__'){
@@ -2674,10 +2721,15 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape'&&overlay.classList.c
 function deleteAnswer(id,skipConfirm){
   const a=state.answers.find(x=>x.id===id);if(!a)return;
   if(!skipConfirm&&!confirm('删除「'+(a.title||'未命名')+'」？此操作无法撤销。'))return;
+  // work out the neighbour before removing, so 删完停在同一分组的下一张
+  const sibs=state.answers.filter(x=>groupOf(x)===groupOf(a));
+  const i=sibs.findIndex(x=>x.id===id);
+  const near=(sibs[i+1]||sibs[i-1]||null);
   state.answers=state.answers.filter(x=>x.id!==id);
   // otherwise the built-in bank would put it straight back on the next load
   if(BUILTIN_IDS.has(id)&&state.builtinGone.indexOf(id)<0)state.builtinGone.push(id);
-  if(state.selectedId===id)state.selectedId=state.answers[0]?state.answers[0].id:null;
+  if(state.selectedId===id)
+    state.selectedId=near?near.id:(state.answers[0]?state.answers[0].id:(state.daily.length?'__daily__':null));
   save();renderAll();
 }
 
@@ -2814,6 +2866,73 @@ document.getElementById('exportBtn').onclick=async()=>{
   const url=URL.createObjectURL(blob);const a=document.createElement('a');
   const d=new Date();const stamp=d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0');
   a.href=url;a.download=(state.appTitle||DEF_TITLE)+'-备份-'+stamp+'.json';a.click();URL.revokeObjectURL(url);
+};
+/* ---- 导出 HTML ----------------------------------------------------------
+   页面读不到自己在磁盘上的文件，所以把当前 DOM 序列化回一份 HTML：
+   先把运行时痕迹（渲染出来的内容区、侧栏列表、弹窗状态、主题、字号、
+   表盘位置）清干净，再把两个标记之间的内置数据整段换成现在的本地内容。
+   <script> 的文本在 DOM 里是原样保存的，所以逻辑不会丢。 */
+function exportBankLiteral(){
+  const keep=(x,fields)=>{
+    const o={};
+    fields.forEach(k=>{
+      const v=x[k];
+      if(v===undefined||v===''||v===null)return;
+      if(Array.isArray(v)&&!v.length)return;
+      o[k]=v;
+    });
+    return o;
+  };
+  const cards=state.answers.map(a=>keep(a,['id','title','group','cueText','fullText','transText','ipaText','patterns','phrases']));
+  const daily=state.daily.map(e=>keep(e,['id','zh','cueText','fullText','transText','ipaText','patterns','phrases','fav']));
+  // 本地进度（复习次数、按段收藏）不进默认数据，它们是每台设备自己的
+  const lay={title:state.appTitle||DEF_TITLE,groups:state.groups.slice(),
+             folders:state.folders.slice(),groupFolder:Object.assign({},state.groupFolder)};
+  const j=v=>JSON.stringify(v).replace(/</g,'\\u003c');   // no '<' can survive to close the script tag
+  return '/* ==== BUILTIN DATA START (「导出 HTML」会整段重写这里，不要手改格式) ==== */\n'
+    +'const BUILTIN_CARDS='+j(cards)+';\n'
+    +'const BUILTIN_DAILY='+j(daily)+';\n'
+    +'const BUILTIN_SCOPE='+j((state.quiz.scope||[]).slice())+';\n'
+    +'const BUILTIN_LAYOUT='+j(lay)+';\n'
+    +'/* ==== BUILTIN DATA END ==== */';
+}
+function exportHtmlText(){
+  const root=document.documentElement.cloneNode(true);
+  const q=sel=>root.querySelector(sel);
+  root.removeAttribute('data-theme');          // theme is a per-device choice
+  root.removeAttribute('style');               // so is the font scale
+  const body=q('body'); if(body)body.className='';
+  [['#mainInner',''],['#qlist',''],['#groupList',''],['#swList',''],['#padRows','']].forEach(([sel,v])=>{
+    const el=q(sel); if(el)el.innerHTML=v;
+  });
+  ['#overlay','#ttsOverlay'].forEach(sel=>{const el=q(sel);if(el)el.classList.remove('show');});
+  const sw=q('#sw');
+  if(sw){sw.removeAttribute('style');sw.classList.add('collapsed');}
+  const setTxt=(sel,v)=>{const el=q(sel);if(el)el.textContent=v;};
+  setTxt('title',state.appTitle||DEF_TITLE);   // not whatever document.title happens to be
+  setTxt('#swTime','0:00');setTxt('#swToggle','开始');setTxt('#fsVal','100%');
+  setTxt('#pTime','0:00 / 0:00');setTxt('#pText','');setTxt('#cacheInfo','');setTxt('#padStatus','');
+  const pl=q('#player'); if(pl)pl.setAttribute('hidden','');
+  const seek=q('#pSeek'); if(seek)seek.setAttribute('value','0');
+  const html='<!DOCTYPE html>\n'+root.outerHTML;
+  const a=html.indexOf('/* ==== BUILTIN DATA START');
+  const bEnd=html.indexOf('==== */',html.indexOf('/* ==== BUILTIN DATA END'));
+  if(a<0||bEnd<0)throw new Error('找不到内置数据的标记，文件可能被改过。');
+  return html.slice(0,a)+exportBankLiteral()+html.slice(bEnd+'==== */'.length);
+}
+document.getElementById('exportHtmlBtn').onclick=()=>{
+  try{
+    const text=exportHtmlText();
+    const blob=new Blob([text],{type:'text/html'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    const d=new Date(),stamp=d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0');
+    a.href=url;a.download=(state.appTitle||DEF_TITLE)+'-'+stamp+'.html';a.click();
+    URL.revokeObjectURL(url);
+    alert('已导出一份 HTML，里面的默认数据是现在的 '
+      +state.answers.length+' 张卡片和 '+state.daily.length+' 条日常用语。\n'
+      +'复习次数、按段收藏、API Key、主题、字号、音频都不在里面，它们存在各自的浏览器里。');
+  }catch(err){alert('导出失败：'+(err&&err.message||err));}
 };
 document.getElementById('importBtn').onclick=()=>document.getElementById('importFile').click();
 document.getElementById('importFile').onchange=e=>{
@@ -3234,6 +3353,7 @@ async function showCacheInfo(){
 }
 $('ttsBtn').onclick=()=>{
   const c=getCfg();
+  $('tAppTitle').value=state.appTitle||DEF_TITLE;
   $('tKey').value=getKey();
   $('tBase').value=c.base;
   $('tModel').value=c.model;
@@ -3250,6 +3370,8 @@ $('tModel').onchange=fillVoices;
 function closeTts(){$('ttsOverlay').classList.remove('show');padCapture=null;if(!padConnected().length)padStop();}
 $('ttsClose').onclick=closeTts;
 $('ttsSave').onclick=()=>{
+  state.appTitle=$('tAppTitle').value.trim()||DEF_TITLE;
+  save();applyTitle();
   setKey($('tKey').value.trim());
   setCfg({...getCfg(),base:$('tBase').value.trim()||DEF_CFG.base,model:$('tModel').value,voice:$('tVoice').value,
           instructions:$('tInstr').value.trim(),speed:parseFloat($('tSpeed').value)||1,
@@ -3424,16 +3546,9 @@ swLoad();swRender();
    Boot
    ============================================================ */
 function applyTitle(){
-  document.title=state.appTitle||DEF_TITLE;
-  const b=document.getElementById('brandTitle');
-  if(b)b.textContent=state.appTitle||DEF_TITLE;
+  document.title=state.appTitle||DEF_TITLE;   // 侧栏不再显示标题，只剩标签页和备份文件名用它
 }
-document.getElementById('brandTitle').onclick=()=>{
-  const nn=prompt('修改标题（清空后确定 = 恢复默认「'+DEF_TITLE+'」）',state.appTitle||DEF_TITLE);
-  if(nn===null)return;
-  state.appTitle=nn.trim()||DEF_TITLE;
-  save();applyTitle();
-};
+
 const FS_KEY='ui_font_scale';
 function applyFs(v){
   v=Math.min(2,Math.max(0.8,Math.round(v*20)/20));
