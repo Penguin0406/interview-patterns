@@ -319,9 +319,13 @@
   .quiz-batch input{width:calc(44px * var(--fs));border:none;background:none;text-align:center;
     font-family:var(--mono);font-size:calc(12.5px * var(--fs));color:var(--ink);padding:2px 0;}
   .quiz-batch input:focus{outline:none;background:var(--card);border-radius:6px;}
-  .quiz-acts select.qrev{border:1px solid var(--line-strong);background:var(--card);color:var(--muted);
-    border-radius:8px;padding:7px 10px;font-family:var(--sans);font-size:calc(12.5px * var(--fs));}
-  .quiz-acts select.qrev:hover{color:var(--ink);border-color:var(--faint);}
+  select.qrev{border:1px solid var(--line-strong);background:var(--card);color:var(--muted);
+    border-radius:20px;padding:6px 12px;font-family:var(--sans);font-size:calc(12.5px * var(--fs));}
+  select.qrev:hover{color:var(--ink);border-color:var(--faint);}
+  /* 日常用语是另一套进度，用一条竖线把它和分组分开 */
+  .quiz-scope .sep{width:1px;background:var(--line-strong);margin:3px 5px;align-self:stretch;}
+  .quiz-batch.rev-on{background:var(--chip);}
+  .quiz-batch.rev-on .lab{color:var(--ink);}
   .quiz-meta{font-family:var(--mono);font-size:calc(11.5px * var(--fs));color:var(--muted);
     letter-spacing:.06em;margin-bottom:10px;}
   .quiz-q{font-family:var(--serif);font-weight:600;font-size:calc(30px * var(--fs));
@@ -929,7 +933,7 @@ let state={answers:[],selectedId:null,view:'quiz',quiz:null,builtinGone:[],built
 // 表示停在提示页，而不是某一题），bat 记当前这一批从哪里开始。
 // hist 存已经抽完的历轮（每轮一份 id 列表），rev 是正在进行的复习场次，
 // 它自己带一套 done / bat / 指针，所以复习不会碰正常轮次的进度
-function blankQuiz(){return {scope:[],done:{},round:{},size:{},bat:{},hist:{},rev:null,at:0,cur:null,stage:0};}
+function blankQuiz(){return {scope:[],lastScope:[],done:{},round:{},size:{},bat:{},hist:{},rev:null,at:0,cur:null,stage:0};}
 state.quiz=blankQuiz();
 
 function uid(){return 'a'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
@@ -1324,6 +1328,7 @@ function load(){
         const q=d.quiz;
         state.quiz={
           scope:Array.isArray(q.scope)?q.scope.filter(x=>typeof x==='string'):[],
+          lastScope:Array.isArray(q.lastScope)?q.lastScope.filter(x=>typeof x==='string'):[],
           done:(q.done&&typeof q.done==='object')?q.done:{},
           round:(q.round&&typeof q.round==='object')?q.round:{},
           size:(q.size&&typeof q.size==='object')?q.size:{},
@@ -2377,7 +2382,16 @@ function setQuizSize(n){
 function renderQuiz(){
   quizPrune();
   const pool=quizPool();
+  // A round finished under an older build never got archived, and the archiving
+  // used to happen only at the instant the last question was drawn. Catch up here
+  // so an already-finished round still shows up in the review list.
+  if(!revActive()&&pool.length&&quizDone().length&&!quizRemaining().length){
+    const before=quizHist().length;
+    archiveRound();
+    if(quizHist().length!==before)save();
+  }
   const sc=state.quiz.scope||[];
+  const rev=revActive();
   const isD=quizIsDaily();
   let chips='<button class="chip'+(sc.length?'':' on')+'" data-g="__all__">全部</button>';
   quizGroups().forEach(g=>{
@@ -2385,16 +2399,27 @@ function renderQuiz(){
     chips+='<button class="chip'+(!isD&&sc.indexOf(g)>=0?' on':'')+'" data-g="'+escAttr(g)+'">'
       +escHtml(g)+' <span style="opacity:.6">'+n+'</span></button>';
   });
-  // 日常用语自成一个资源库，选了它就不混卡片
+  // 日常用语自成一个资源库，选了它就不混卡片；两边各记各的进度，
+  // 再点一下就回到刚才那套分组选择
   const nd=state.daily.filter(dailyAskable).length;
-  if(nd)chips+='<button class="chip'+(isD?' on':'')+'" data-g="'+QDAILY+'">日常用语'
+  if(nd)chips+='<span class="sep"></span><button class="chip'+(isD?' on':'')+'" data-g="'+QDAILY+'"'
+    +' title="日常用语单独一套进度，再点一下回到刚才的卡片范围">日常用语'
     +' <span style="opacity:.6">'+nd+'</span></button>';
   const size=quizSize();
   const bsz='<div class="quiz-batch"><span class="lab">每批</span>'
     +'<button id="bszDn" aria-label="减少">−</button>'
     +'<input id="bszVal" type="text" inputmode="numeric" value="'+(size?size:'全部')+'" aria-label="每批题数">'
     +'<button id="bszUp" aria-label="增加">+</button></div>';
-  const rev=revActive();
+  // 复习入口放在范围那一行，随时看得到，不用等抽完一轮才出现
+  const hist=quizHist();
+  const revBox=rev
+    ?'<div class="quiz-batch rev-on"><span class="lab">复习第 '+rev.no+' 轮</span>'
+      +'<button id="qRevQuit">退出</button></div>'
+    :(hist.length
+      ?'<select class="qrev" id="qRevSel"><option value="">复习旧的一轮…</option>'
+        +hist.slice().reverse().map(h=>'<option value="'+h.no+'">复习第 '+h.no+' 轮（'+h.ids.length+' 题）</option>').join('')
+        +'</select>'
+      :'');
   const done=quizDone(),b=quizBat();
   const doneN=done.length;
   const at=Math.max(b.start,Math.min(state.quiz.at,done.length));
@@ -2436,13 +2461,6 @@ function renderQuiz(){
       }
     }else{
       const back=inB>0?'<button class="btn" id="qPrev">上一题</button>':'';
-      const hist=quizHist();
-      // 历轮多了就是一排按钮，所以收进一个下拉菜单
-      const revSel=(!rev&&hist.length)
-        ?'<select class="qrev" id="qRevSel"><option value="">复习旧的一轮…</option>'
-          +hist.slice().reverse().map(h=>'<option value="'+h.no+'">复习第 '+h.no+' 轮（'+h.ids.length+' 题）</option>').join('')
-          +'</select>':'';
-      const quit=rev?'<button class="btn" id="qRevExit">退出复习</button>':'';
       if(!quizRemaining().length){
         if(rev){
           qHtml='<p class="quiz-note">第 '+rev.no+' 轮的 '+pool.length+' 题已经复习完了。</p>';
@@ -2450,25 +2468,32 @@ function renderQuiz(){
             +'<button class="btn primary" id="qRevExit">回到第 '+quizRound()+' 轮</button>';
         }else{
           qHtml='<p class="quiz-note">这一轮 '+pool.length+' 题已经全部抽完。</p>';
-          acts=back+'<button class="btn primary" id="qRound">开始下一轮</button>'+revSel;
+          acts=back+'<button class="btn primary" id="qRound">开始下一轮</button>';
         }
       }else if(inB>0&&inB>=target){
         qHtml='<p class="quiz-note">这一批 '+inB+' 题抽完了，'+(rev?'这次复习':'本轮')+'还剩 '+quizRemaining().length+' 题。</p>';
-        acts=back+'<button class="btn primary" id="qBatch">下一批</button>'+quit+revSel;
+        acts=back+'<button class="btn primary" id="qBatch">下一批</button>';
       }else{
         qHtml='<p class="quiz-note">'+(rev?'这次复习':'这一轮')+'还剩 '+quizRemaining().length+' 题。</p>';
-        acts=back+'<button class="btn primary" id="qStart">'+(doneN?'接着抽':(rev?'开始复习':'开始抽背'))+'</button>'+quit+revSel;
+        acts=back+'<button class="btn primary" id="qStart">'+(doneN?'接着抽':(rev?'开始复习':'开始抽背'))+'</button>';
       }
     }
   }
-  mainInner.innerHTML='<div class="quiz-scope">'+chips+(pool.length?bsz:'')+'</div>'
+  mainInner.innerHTML='<div class="quiz-scope">'+chips+(pool.length?bsz+revBox:'')+'</div>'
     +'<div class="quiz-meta">'+escHtml(meta)+'</div>'+qHtml
     +'<div class="quiz-acts">'+acts+'</div>'+body;
   mainInner.querySelectorAll('.quiz-scope .chip').forEach(b=>{
     b.onclick=()=>{
       const g=b.dataset.g;
-      if(g==='__all__')state.quiz.scope=[];
-      else if(g===QDAILY)state.quiz.scope=quizIsDaily()?[]:[QDAILY];
+      if(g===QDAILY){
+        if(quizIsDaily()){
+          // back to whatever set of groups was selected before
+          state.quiz.scope=(state.quiz.lastScope||[]).slice();
+        }else{
+          state.quiz.lastScope=(state.quiz.scope||[]).slice();
+          state.quiz.scope=[QDAILY];
+        }
+      }else if(g==='__all__')state.quiz.scope=[];
       else{
         // picking a group leaves the daily pool, the two never mix
         const s=(quizIsDaily()?[]:(state.quiz.scope||[])).slice(),i=s.indexOf(g);
@@ -2496,6 +2521,7 @@ function renderQuiz(){
   on('qRound',quizNewRound);
   on('qRevAgain',quizReviewAgain);
   on('qRevExit',quizExitReview);
+  on('qRevQuit',quizExitReview);
   const rs=document.getElementById('qRevSel');
   if(rs)rs.onchange=()=>{const n=parseInt(rs.value,10);if(isFinite(n))quizStartReview(n);};
   on('bszDn',()=>setQuizSize((size||pool.length)-1));
