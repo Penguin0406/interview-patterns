@@ -1339,6 +1339,15 @@ function load(){
           cur:typeof q.cur==='string'?q.cur:null,
           stage:(q.stage===1||q.stage===2)?q.stage:0
         };
+        // archives written when the unit was a whole round: relabel them as such
+        Object.keys(state.quiz.hist).forEach(k=>{
+          const list=state.quiz.hist[k];
+          if(!Array.isArray(list))return;
+          state.quiz.hist[k]=list.filter(x=>x&&Array.isArray(x.ids)).map(x=>
+            (typeof x.r==='number')?x:{r:(typeof x.no==='number'?x.no:1),b:1,whole:true,ids:x.ids});
+        });
+        if(state.quiz.rev&&!state.quiz.rev.label)
+          state.quiz.rev.label='第 '+(state.quiz.rev.no||1)+' 轮';
         // saved before batches existed: place the pointer on the card it was showing
         if(state.quiz.at===null){
           const list=state.quiz.done[quizScopeKey()];
@@ -2247,16 +2256,21 @@ function quizDoneSet(arr){
   if(r)r.done=arr;else state.quiz.done[quizScopeKey()]=arr;
 }
 function quizRound(){return state.quiz.round[quizScopeKey()]||1;}
-// 把刚抽完的这一轮存进历史，以后可以回头复习。同一轮只存一份，
-// 反复调用不会重复堆积；只留最近 20 轮，免得本地存储无限长大
-function archiveRound(){
+function histKey(h){return h.r+':'+h.b;}
+function histLabel(h){return h.whole?('第 '+h.r+' 轮'):('第 '+h.r+' 轮第 '+h.b+' 批');}
+// 存档的单位是**一批**，不是一轮：44 题一起复习太长，每抽完一批就
+// 应该能把这一批再过一遍。每批只存一份（按轮号 + 批号去重），反复调用
+// 不会堆积；每批就是整轮时标成 whole，显示上就叫「第 N 轮」。
+function archiveBatch(){
   if(revActive())return;
-  const done=quizDone();
-  if(!done.length)return;
-  const no=quizRound(),h=quizHist(),rec={no:no,ids:done.slice()};
-  const i=h.findIndex(x=>x&&x.no===no);
+  const done=quizDone(),b=quizBat();
+  const ids=done.slice(b.start);
+  if(!ids.length)return;
+  const h=quizHist();
+  const rec={r:quizRound(),b:(b.no||1),whole:!(b.size>0),ids:ids};
+  const i=h.findIndex(x=>x&&histKey(x)===histKey(rec));
   if(i>=0)h[i]=rec;else h.push(rec);
-  while(h.length>20)h.shift();
+  while(h.length>40)h.shift();
 }
 function quizRemaining(){
   const done=new Set(quizDone());
@@ -2307,7 +2321,7 @@ function quizPrune(){
 }
 function quizDraw(){
   const rest=quizRemaining(),done=quizDone();
-  if(!rest.length)archiveRound();   // the round just ended: keep it for later review
+  if(!rest.length||quizBatchFull())archiveBatch();   // this batch is done: keep it for review
   if(!rest.length||quizBatchFull()){
     state.quiz.at=done.length;state.quiz.stage=0;save();renderMain();return;
   }
@@ -2338,7 +2352,7 @@ function quizNextBatch(){
 }
 function quizNewRound(){
   const k=quizScopeKey();
-  archiveRound();
+  archiveBatch();
   state.quiz.done[k]=[];
   state.quiz.round[k]=quizRound()+1;
   state.quiz.bat[k]={start:0,size:quizSize(),no:1};
@@ -2347,10 +2361,10 @@ function quizNewRound(){
 /* ---- 复习旧的一轮 -------------------------------------------------------
    开一个独立场次，题目是那一轮当时抽过的那些，重新随机抽一遍，
    所以顺序和当时不一样。轮次号不变，正常进度原封不动。 */
-function quizStartReview(no){
-  const rec=quizHist().find(x=>x&&x.no===no);
+function quizStartReview(key){
+  const rec=quizHist().find(x=>x&&histKey(x)===key);
   if(!rec)return;
-  state.quiz.rev={key:quizScopeKey(),no:no,ids:rec.ids.slice(),done:[],
+  state.quiz.rev={key:quizScopeKey(),label:histLabel(rec),ids:rec.ids.slice(),done:[],
                   bat:{start:0,size:quizSize(),no:1},mainAt:state.quiz.at};
   state.quiz.at=0;state.quiz.stage=0;
   quizDraw();
@@ -2382,13 +2396,13 @@ function setQuizSize(n){
 function renderQuiz(){
   quizPrune();
   const pool=quizPool();
-  // A round finished under an older build never got archived, and the archiving
-  // used to happen only at the instant the last question was drawn. Catch up here
-  // so an already-finished round still shows up in the review list.
-  if(!revActive()&&pool.length&&quizDone().length&&!quizRemaining().length){
-    const before=quizHist().length;
-    archiveRound();
-    if(quizHist().length!==before)save();
+  // A batch that finished under an older build never got archived, and archiving
+  // used to happen only at the instant the last question of it was drawn. Catch up
+  // here so an already-finished batch still shows up in the review list.
+  if(!revActive()&&pool.length&&(quizBatchFull()||!quizRemaining().length)){
+    const before=JSON.stringify(quizHist());
+    archiveBatch();
+    if(JSON.stringify(quizHist())!==before)save();
   }
   const sc=state.quiz.scope||[];
   const rev=revActive();
@@ -2413,11 +2427,11 @@ function renderQuiz(){
   // 复习入口放在范围那一行，随时看得到，不用等抽完一轮才出现
   const hist=quizHist();
   const revBox=rev
-    ?'<div class="quiz-batch rev-on"><span class="lab">复习第 '+rev.no+' 轮</span>'
+    ?'<div class="quiz-batch rev-on"><span class="lab">复习'+rev.label+'</span>'
       +'<button id="qRevQuit">退出</button></div>'
     :(hist.length
-      ?'<select class="qrev" id="qRevSel"><option value="">复习旧的一轮…</option>'
-        +hist.slice().reverse().map(h=>'<option value="'+h.no+'">复习第 '+h.no+' 轮（'+h.ids.length+' 题）</option>').join('')
+      ?'<select class="qrev" id="qRevSel"><option value="">复习前面抽过的…</option>'
+        +hist.slice().reverse().map(h=>'<option value="'+escAttr(histKey(h))+'">复习'+escHtml(histLabel(h))+'（'+h.ids.length+' 题）</option>').join('')
         +'</select>'
       :'');
   const done=quizDone(),b=quizBat();
@@ -2432,8 +2446,10 @@ function renderQuiz(){
     meta='这个范围里没有卡片';
     qHtml='<p class="quiz-note">先到卡片库里加几张，或者换一个分组。</p>';
   }else{
-    meta=rev?('复习第 '+rev.no+' 轮'):('第 '+quizRound()+' 轮');
-    if(size)meta+=' · 第 '+(b.no||1)+' 批 '+Math.min(at-b.start+(cur?1:0),inB)+' / '+target;
+    meta=rev?('复习'+rev.label):('第 '+quizRound()+' 轮');
+    // 复习一批时，它本身就是一批，再报一遍批次是重复的
+    if(size&&!(rev&&target>=pool.length))
+      meta+=' · 第 '+(b.no||1)+' 批 '+Math.min(at-b.start+(cur?1:0),inB)+' / '+target;
     meta+=' · '+(rev?'已过 ':'本轮 ')+doneN+' / '+pool.length;
     if(cur){
       const hasCue=!!String(cur.cueText||'').trim();
@@ -2463,7 +2479,7 @@ function renderQuiz(){
       const back=inB>0?'<button class="btn" id="qPrev">上一题</button>':'';
       if(!quizRemaining().length){
         if(rev){
-          qHtml='<p class="quiz-note">第 '+rev.no+' 轮的 '+pool.length+' 题已经复习完了。</p>';
+          qHtml='<p class="quiz-note">'+rev.label+'的 '+pool.length+' 题已经复习完了。</p>';
           acts=back+'<button class="btn" id="qRevAgain">再复习一遍</button>'
             +'<button class="btn primary" id="qRevExit">回到第 '+quizRound()+' 轮</button>';
         }else{
@@ -2523,7 +2539,7 @@ function renderQuiz(){
   on('qRevExit',quizExitReview);
   on('qRevQuit',quizExitReview);
   const rs=document.getElementById('qRevSel');
-  if(rs)rs.onchange=()=>{const n=parseInt(rs.value,10);if(isFinite(n))quizStartReview(n);};
+  if(rs)rs.onchange=()=>{if(rs.value)quizStartReview(rs.value);};
   on('bszDn',()=>setQuizSize((size||pool.length)-1));
   on('bszUp',()=>setQuizSize((size||pool.length)+1));
   const bv=document.getElementById('bszVal');
