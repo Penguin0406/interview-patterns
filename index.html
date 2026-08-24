@@ -299,7 +299,7 @@
      the layout already takes on a narrow viewport */
   body.quiz-mode .app{grid-template-columns:1fr;grid-template-rows:auto 1fr;height:auto;min-height:100vh;}
   body.quiz-mode .side{border-right:none;border-bottom:1px solid var(--line);}
-  body.quiz-mode .side-tools,body.quiz-mode .qlist{display:none;}
+  body.quiz-mode .side-tools,body.quiz-mode .qlist,body.quiz-mode .side-search{display:none;}
   /* the top bar now runs the full width: keep its right edge clear of the
      stopwatch, which floats at the top right */
   body.quiz-mode .side-head{padding-right:calc(64px * var(--fs));}
@@ -518,6 +518,22 @@
   }
   input.f:focus,textarea.f:focus{outline:none;border-color:var(--faint);box-shadow:0 0 0 3px var(--ring);}
   textarea.f{line-height:1.5;}
+  /* ---- search boxes (card library sidebar + daily board) ---- */
+  .side-search{padding:10px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:6px;}
+  .side-search input{flex:1;min-width:0;border:1px solid var(--line-strong);border-radius:9px;background:var(--card);
+    padding:8px 11px;font-family:var(--sans);font-size:calc(13px * var(--fs));color:var(--ink);}
+  .side-search input:focus{outline:none;border-color:var(--faint);box-shadow:0 0 0 3px var(--ring);}
+  .pb-search{display:flex;align-items:center;gap:4px;}
+  .pb-search input{border:1px solid var(--line-strong);border-radius:9px;background:var(--card);
+    padding:6px 10px;font-family:var(--sans);font-size:calc(13px * var(--fs));color:var(--ink);
+    width:calc(190px * var(--fs));max-width:46vw;}
+  .pb-search input:focus{outline:none;border-color:var(--faint);box-shadow:0 0 0 3px var(--ring);}
+  .ss-clear{border:none;background:none;color:var(--muted);cursor:pointer;line-height:1;
+    font-size:calc(13px * var(--fs));padding:3px 5px;border-radius:6px;flex:0 0 auto;}
+  .ss-clear:hover{color:var(--ink);background:var(--hover);}
+  .ss-clear[hidden]{display:none;}
+  .search-info{font-family:var(--mono);font-size:calc(10.5px * var(--fs));color:var(--muted);
+    padding:6px 6px 10px;letter-spacing:.3px;}
   .modal-foot{display:flex;gap:10px;padding:16px 24px 22px;align-items:center;}
   .modal-foot .spacer{flex:1;}
   details.quick{margin-bottom:18px;border:1px solid var(--line);border-radius:10px;background:var(--panel);}
@@ -542,8 +558,9 @@
     .brand-sub{font-size:calc(9.5px * var(--fs));margin-top:2px;}
     #listToggle{display:inline-flex;align-items:center;gap:5px;padding:7px 12px;}
     /* card list is a collapsible drawer on mobile */
-    .side-tools,.qlist{display:none;}
+    .side-tools,.qlist,.side-search{display:none;}
     .side.open .side-tools{display:flex;}
+    .side.open .side-search{display:flex;}
     .side.open .qlist{display:block;max-height:62vh;overflow-y:auto;-webkit-overflow-scrolling:touch;}
     .qitem{margin-bottom:6px;}
     .cnt button{width:24px;height:24px;font-size:calc(14px * var(--fs));}
@@ -581,6 +598,7 @@
     .modal-foot{padding:12px 16px 16px;}
     /* 16px inputs stop iOS auto-zoom on focus */
     input.f,textarea.f{font-size:calc(16px * var(--fs));}
+    .side-search input,.pb-search input{font-size:calc(16px * var(--fs));}
   }
   @media (prefers-reduced-motion:reduce){*{transition:none!important;}}
 </style>
@@ -621,6 +639,10 @@
       <button class="btn ghost" id="exportBtn">导出</button>
       <button class="btn ghost" id="exportHtmlBtn" title="导出一份把当前内容写死为默认数据的 HTML">导出 HTML</button>
       <input type="file" id="importFile" accept="application/json" hidden>
+    </div>
+    <div class="side-search">
+      <input type="text" id="cardSearch" placeholder="搜索标题或内容…" aria-label="搜索卡片">
+      <button class="ss-clear" id="cardSearchClear" title="清除搜索" aria-label="清除搜索" hidden>✕</button>
     </div>
     <div class="qlist" id="qlist"></div>
   </aside>
@@ -927,7 +949,7 @@ function bestAlignment(text,lits){
    ============================================================ */
 const LS_KEY='interview_practice_v1';
 const DEF_TITLE='流畅表达任何事';
-let state={answers:[],selectedId:null,view:'quiz',quiz:null,builtinGone:[],builtinRegroup:0,mode:'full',showZh:false,revealAll:false,revealZh:false,pbRevealAll:false,openGroup:null,pbShowZh:false,pbFavOnly:false,pbMode:'pattern',daily:[],dailyOpen:null,appTitle:DEF_TITLE,favOnlySent:false,groupOrder:[],groups:[],folders:[],groupFolder:{},openFolder:null};
+let state={answers:[],selectedId:null,view:'quiz',quiz:null,builtinGone:[],builtinRegroup:0,mode:'full',showZh:false,revealAll:false,revealZh:false,pbRevealAll:false,openGroup:null,pbShowZh:false,pbFavOnly:false,pbMode:'pattern',daily:[],dailyOpen:null,appTitle:DEF_TITLE,favOnlySent:false,groupOrder:[],groups:[],folders:[],groupFolder:{},openFolder:null,cardSearch:'',dailySearch:''};
 // 抽背进度：done / round / size / bat 都按资源库（已选分组的组合）分开记。
 // done 是本轮抽过的顺序，at 是当前看的是其中第几题（等于 done.length 时
 // 表示停在提示页，而不是某一题），bat 记当前这一批从哪里开始。
@@ -1962,10 +1984,39 @@ function buildCard(a,inFav){
   if(!inFav)attachDrag(el,'card',a.id);
   return el;
 }
+// search matchers. Card library matches title + all textual content (full text,
+// translation, keyword cue, and pattern/phrase text); daily matches the sentence
+// itself on both sides (original + Chinese). Cut markers are stripped first.
+function cardMatches(a,q){
+  if(!q)return true;
+  const parts=[a.title||'',parseCuts(a.fullText||'').text,a.transText||'',a.cueText||''];
+  (a.patterns||[]).forEach(p=>{parts.push(p.en||'');parts.push(p.zh||'');});
+  (a.phrases||[]).forEach(p=>{parts.push(p.en||'');parts.push(p.zh||'');});
+  return parts.join('\u0001').toLowerCase().indexOf(q)>=0;
+}
+function dailyMatches(e,q){
+  if(!q)return true;
+  return (parseCuts(e.fullText||'').text+'\u0001'+(e.zh||'')).toLowerCase().indexOf(q)>=0;
+}
 function renderSidebar(){
   syncGroups();
   const scroll=qlist.scrollTop;
   qlist.innerHTML='';
+
+  // active card-library search: flat list of matching cards, accordion set aside
+  const cq=(state.cardSearch||'').trim().toLowerCase();
+  const csc=document.getElementById('cardSearchClear');
+  if(csc)csc.hidden=!cq;
+  if(cq){
+    const hits=state.answers.filter(a=>cardMatches(a,cq));
+    const info=document.createElement('div');
+    info.className='search-info';
+    info.textContent=hits.length?('搜索到 '+hits.length+' 张卡片'):'没有匹配的卡片';
+    qlist.appendChild(info);
+    hits.forEach(a=>qlist.appendChild(buildCard(a,true)));  // no drag / drop in a filtered view
+    qlist.scrollTop=0;
+    return;
+  }
 
   // fixed 日常用语 zone pinned above everything
   const dq=document.createElement('div');
@@ -2113,32 +2164,15 @@ function moveDaily(srcId,targetId,after){
   save();renderMain();
 }
 function renderDailyBoard(){
-  const base=state.daily.filter(e=>!state.pbFavOnly||e.fav);
-  // favourites float to the top; relative order within each part is preserved
-  const shown=base.filter(e=>e.fav).concat(base.filter(e=>!e.fav));
-  let itemsHtml='';
-  for(const e of shown){
-    const zh=(e.zh||'').trim();
-    itemsHtml+='<div class="card pb-item" data-id="'+e.id+'">'
-      +'<button class="pb-drag" title="拖动排序" aria-label="拖动排序">⠿</button>'
-      +'<button class="pstar'+(e.fav?' on':'')+'" aria-label="收藏这条"></button>'
-      +'<div class="pb-main'+(zh?'':' pb-solo')+'">'
-      +'<div class="pb-en'+(state.pbRevealAll?'':' masked')+'">'+renderDailyRowHtml(e)+'</div>'
-      +(zh?'<div class="pb-zh">'+spacesToHtml(zh)+'</div>':'')
-      +'</div>'
-      +'<button class="pb-act pb-open" title="打开完整练习页">›</button>'
-      +'<button class="pb-act pb-edit" title="编辑这条">✎</button>'
-      +'<button class="pb-act pb-del" title="删除这条">✕</button>'
-      +'</div>';
-  }
-  if(!shown.length)itemsHtml='<div class="pb-empty">'+(state.pbFavOnly?'还没有收藏的内容。':'还没有内容，用下面的输入框添加第一条。')+'</div>';
   mainInner.innerHTML='<h1 class="ans-title">日常用语</h1>'
     +'<div class="controls">'
     +'<div class="aux">'
     +'<button class="toggle'+(state.pbFavOnly?' on':'')+'" id="pbFav">只看收藏</button>'
     +'<button class="toggle'+(state.pbRevealAll?' on':'')+'" id="pbReveal">显示全部原文</button>'
+    +'<span class="pb-search"><input type="text" id="pbSearch" placeholder="搜索句子…" aria-label="搜索日常用语" value="'+escAttr(state.dailySearch||'')+'">'
+    +'<button class="ss-clear" id="pbSearchClear" title="清除搜索" aria-label="清除搜索"'+((state.dailySearch||'').trim()?'':' hidden')+'>✕</button></span>'
     +'</div></div>'
-    +'<div id="pbList">'+itemsHtml+'</div>'
+    +'<div id="pbList"></div>'
     +'<div class="card pb-add-card"><div class="pb-add">'
     +'<input class="f" id="pbEn" placeholder="原文">'
     +'<input class="f" id="pbZhIn" placeholder="中文翻译">'
@@ -2146,8 +2180,51 @@ function renderDailyBoard(){
     +'<button class="btn primary" id="pbAdd">添加</button>'
     +'</div></div>'
     +'<p class="pb-hint">左边原文默认挖空，右边中文一直显示；点一下显示原文，再点收起。每个 ♪ 朗读一段（分段规则与卡片一致，含 " / " 手动切分）；拖 ⠿ 排序，› 打开完整练习页。粘贴框支持「句型/短语」自动识别，Ctrl+回车添加。</p>';
+  const listEl=document.getElementById('pbList');
+  // repaint just the rows from current state + filters, so the search box keeps focus while typing
+  function paintRows(){
+    const q=(state.dailySearch||'').trim().toLowerCase();
+    const base=state.daily.filter(e=>!state.pbFavOnly||e.fav);
+    // favourites float to the top; relative order within each part is preserved
+    const shown=base.filter(e=>e.fav).concat(base.filter(e=>!e.fav));
+    const filtered=q?shown.filter(e=>dailyMatches(e,q)):shown;
+    let itemsHtml='';
+    for(const e of filtered){
+      const zh=(e.zh||'').trim();
+      itemsHtml+='<div class="card pb-item" data-id="'+e.id+'">'
+        +'<button class="pb-drag" title="拖动排序" aria-label="拖动排序">⠿</button>'
+        +'<button class="pstar'+(e.fav?' on':'')+'" aria-label="收藏这条"></button>'
+        +'<div class="pb-main'+(zh?'':' pb-solo')+'">'
+        +'<div class="pb-en'+(state.pbRevealAll?'':' masked')+'">'+renderDailyRowHtml(e)+'</div>'
+        +(zh?'<div class="pb-zh">'+spacesToHtml(zh)+'</div>':'')
+        +'</div>'
+        +'<button class="pb-act pb-open" title="打开完整练习页">›</button>'
+        +'<button class="pb-act pb-edit" title="编辑这条">✎</button>'
+        +'<button class="pb-act pb-del" title="删除这条">✕</button>'
+        +'</div>';
+    }
+    if(!filtered.length)itemsHtml='<div class="pb-empty">'
+      +(q?'没有匹配的内容。':(state.pbFavOnly?'还没有收藏的内容。':'还没有内容，用下面的输入框添加第一条。'))+'</div>';
+    listEl.innerHTML=itemsHtml;
+    // drag to reorder: whole row, pointer-based so touch works too. Rebound on every repaint.
+    listEl.querySelectorAll('.pb-item').forEach(el=>{
+      makeDraggable(el,{
+        container:listEl,targetSel:'.pb-item',
+        canDrop:()=>'order',
+        onDrop:(t,below)=>moveDaily(el.dataset.id,t.dataset.id,below)
+      });
+    });
+    const clr=document.getElementById('pbSearchClear');
+    if(clr)clr.hidden=!q;
+    if(typeof markCached==='function')markCached();
+  }
   document.getElementById('pbFav').onclick=()=>{state.pbFavOnly=!state.pbFavOnly;save();renderMain();};
   document.getElementById('pbReveal').onclick=()=>{state.pbRevealAll=!state.pbRevealAll;renderMain();};
+  (function(){
+    const s=document.getElementById('pbSearch'),c=document.getElementById('pbSearchClear');
+    if(s)s.addEventListener('input',()=>{state.dailySearch=s.value;paintRows();});   // repaint rows only, box keeps focus
+    if(c)c.onclick=()=>{state.dailySearch='';if(s){s.value='';s.focus();}paintRows();};
+  })();
   const addRow=()=>{
     const en=document.getElementById('pbEn').value.trim();
     const zh=document.getElementById('pbZhIn').value.trim();
@@ -2168,7 +2245,6 @@ function renderDailyBoard(){
   document.getElementById('pbEn').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();document.getElementById('pbZhIn').focus();}});
   document.getElementById('pbZhIn').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();addRow();}});
   document.getElementById('pbPP').addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();addRow();}});
-  const listEl=document.getElementById('pbList');
   listEl.addEventListener('click',e=>{
     if(e.target.closest('.abtn'))return;   // shared audio listener handles playback
     const row=e.target.closest('.pb-item');if(!row)return;
@@ -2185,15 +2261,7 @@ function renderDailyBoard(){
       if(en)en.classList.toggle('masked');
     }
   });
-  // drag to reorder: whole row, pointer-based so touch works too
-  listEl.querySelectorAll('.pb-item').forEach(el=>{
-    makeDraggable(el,{
-      container:listEl,targetSel:'.pb-item',
-      canDrop:()=>'order',
-      onDrop:(t,below)=>moveDaily(el.dataset.id,t.dataset.id,below)
-    });
-  });
-  if(typeof markCached==='function')markCached();
+  paintRows();
 }
 
 /* ============================================================
@@ -2961,6 +3029,12 @@ document.getElementById('pasteBox').addEventListener('paste',()=>setTimeout(runP
    ============================================================ */
 document.getElementById('newGroupBtn').onclick=()=>newGroup(state.openFolder||null);
 document.getElementById('newFolderBtn').onclick=()=>newFolder();
+(function(){
+  const inp=document.getElementById('cardSearch');
+  const clr=document.getElementById('cardSearchClear');
+  if(inp)inp.addEventListener('input',()=>{state.cardSearch=inp.value;renderSidebar();});
+  if(clr)clr.onclick=()=>{state.cardSearch='';if(inp){inp.value='';inp.focus();}renderSidebar();};
+})();
 /* ---- backup payload: every card and every daily entry goes out with a full
    field set, so sentences, per-segment favourites, review counts, translations
    and IPA survive a round trip even when an entry never had one of them ---- */
