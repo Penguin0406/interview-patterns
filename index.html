@@ -184,7 +184,7 @@
   .toggle.on{background:var(--ink);border-color:var(--ink);color:var(--on-ink-fg);}
   .toggle[hidden]{display:none;}
 
-  .rowbtns{display:flex;gap:8px;margin-bottom:20px;}
+  .rowbtns{display:flex;gap:8px;margin-bottom:20px;align-items:center;}
   .linkbtn{background:none;border:none;font-size:calc(12.5px * var(--fs));color:var(--muted);padding:2px 0;}
   .linkbtn:hover{color:var(--ink);text-decoration:underline;}
   .linkbtn.danger:hover{color:var(--danger);}
@@ -2375,6 +2375,19 @@ function quizReviewAgain(){
   state.quiz.at=0;state.quiz.stage=0;
   quizDraw();
 }
+/* ---- 复习收藏 --------------------------------------------------------------
+   把当前范围里已收藏的卡片作为一场独立复习场次随机再过一遍。收藏用的是卡片
+   本身的 fav（和卡片库 ★收藏、日常板块星标同一个），入口只在一批抽完的提示页。
+   复用 rev 场次：不算新一轮、不进历史、退出时回到原来的进度。ids 在进入时快照，
+   与历史复习一致；此后取消收藏不改变本场，只影响下次的收藏复习。 */
+function quizStartFavReview(){
+  const ids=quizPool().filter(x=>x&&x.fav).map(x=>x.id);   // must read scope pool before rev is set
+  if(!ids.length)return;
+  state.quiz.rev={key:quizScopeKey(),label:'\u6536\u85cf',fav:true,ids:ids,done:[],
+                  bat:{start:0,size:quizSize(),no:1},mainAt:state.quiz.at};
+  state.quiz.at=0;state.quiz.stage=0;
+  quizDraw();
+}
 function quizExitReview(){
   const r=state.quiz.rev;
   const back=(r&&typeof r.mainAt==='number')?r.mainAt:null;
@@ -2462,8 +2475,13 @@ function renderQuiz(){
         +'<button class="btn" id="qCue"'+cueOff+'>关键词</button>'
         +'<button class="btn" id="qFull"'+fullOff+'>回答全文</button>'
         +'<button class="btn primary" id="qNext">下一题</button>';
-      // 背到一半发现要改：直接开同一个编辑弹窗，存完回到这一题
-      body+='<div class="rowbtns"><button class="linkbtn" id="qEdit">编辑这张卡片</button>'
+      // 背到一半发现要改：直接开同一个编辑弹窗，存完回到这一题。
+      // 星标收藏当前卡片，用的是卡片本身的 fav（和卡片库 ★收藏、日常板块的星标同一个），
+      // 所以在这里收藏 / 取消都会同步到那些地方；任何阶段都能点。
+      const curFav=!!cur.fav;
+      body+='<div class="rowbtns">'
+        +'<button class="star qfav'+(curFav?' on':'')+'" id="qFav" title="'+(curFav?'取消收藏':'收藏这张卡片')+'" aria-label="收藏或取消收藏当前卡片"></button>'
+        +'<button class="linkbtn" id="qEdit">编辑这张卡片</button>'
         +(rev?'<button class="linkbtn" id="qRevExit">退出复习，回到第 '+quizRound()+' 轮</button>':'')
         +'</div>';
       if(st>=1&&hasCue)
@@ -2477,6 +2495,9 @@ function renderQuiz(){
       }
     }else{
       const back=inB>0?'<button class="btn" id="qPrev">上一题</button>':'';
+      // 一批抽完后，可以单独复习这一范围里收藏的卡片（不在复习中时才提供，避免复习套复习）
+      const favN=rev?0:pool.filter(x=>x&&x.fav).length;
+      const favBtn=favN?'<button class="btn" id="qFavRev">复习收藏的（'+favN+'）</button>':'';
       if(!quizRemaining().length){
         if(rev){
           qHtml='<p class="quiz-note">'+rev.label+'的 '+pool.length+' 题已经复习完了。</p>';
@@ -2484,11 +2505,11 @@ function renderQuiz(){
             +'<button class="btn primary" id="qRevExit">回到第 '+quizRound()+' 轮</button>';
         }else{
           qHtml='<p class="quiz-note">这一轮 '+pool.length+' 题已经全部抽完。</p>';
-          acts=back+'<button class="btn primary" id="qRound">开始下一轮</button>';
+          acts=back+favBtn+'<button class="btn primary" id="qRound">开始下一轮</button>';
         }
       }else if(inB>0&&inB>=target){
         qHtml='<p class="quiz-note">这一批 '+inB+' 题抽完了，'+(rev?'这次复习':'本轮')+'还剩 '+quizRemaining().length+' 题。</p>';
-        acts=back+'<button class="btn primary" id="qBatch">下一批</button>';
+        acts=back+favBtn+'<button class="btn primary" id="qBatch">下一批</button>';
       }else{
         qHtml='<p class="quiz-note">'+(rev?'这次复习':'这一轮')+'还剩 '+quizRemaining().length+' 题。</p>';
         acts=back+'<button class="btn primary" id="qStart">'+(doneN?'接着抽':(rev?'开始复习':'开始抽背'))+'</button>';
@@ -2528,6 +2549,8 @@ function renderQuiz(){
     if(!cur)return;
     quizIsDaily()?openDailyEditor(cur.id):openEditor(cur.id);
   });
+  on('qFav',()=>{if(!cur)return;cur.fav=!cur.fav;save();renderMain();});
+  on('qFavRev',quizStartFavReview);
   on('qCue',()=>{state.quiz.stage=1;save();renderMain();});
   on('qFull',()=>{state.quiz.stage=2;save();renderMain();});
   on('qNext',quizNext);
