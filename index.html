@@ -2272,8 +2272,11 @@ function quizScopeKey(){
   return s.length?s.join('\u241f'):'__all__';
 }
 const QDAILY='__daily__';
+const QFAV='__fav__';
 function quizTitled(a){return !!String(a.title||'').trim();}
 function quizIsDaily(){return (state.quiz.scope||[]).indexOf(QDAILY)>=0;}
+// 「收藏的卡片」也自成一个资源库：只抽卡片级收藏（a.fav），和分组、日常互不相混
+function quizIsFav(){return (state.quiz.scope||[]).indexOf(QFAV)>=0;}
 // a daily entry is worth asking when it has a Chinese side or any text at all
 function dailyAskable(e){return !!(String(e.zh||'').trim()||String(e.fullText||'').trim());}
 // 日常用语的题面是中文，和板块上看中文回忆原文一致
@@ -2309,6 +2312,7 @@ function quizPool(){
     return r.ids.map(id=>src.find(x=>x.id===id)).filter(x=>x&&ok(x));
   }
   if(quizIsDaily())return state.daily.filter(dailyAskable);
+  if(quizIsFav())return state.answers.filter(a=>quizTitled(a)&&a.fav);
   const sc=state.quiz.scope||[];
   return state.answers.filter(a=>quizTitled(a)&&(!sc.length||sc.indexOf(groupOf(a))>=0));
 }
@@ -2395,14 +2399,14 @@ function quizDraw(){
   }
   const pick=rest[Math.floor(Math.random()*rest.length)];
   done.push(pick.id);
-  state.quiz.at=done.length-1;state.quiz.stage=0;
+  state.quiz.at=done.length-1;state.quiz.stage=0;state.quiz.favSent=false;
   save();renderMain();
 }
 // 下一题：回看过之后先把看过的那几题往前翻完，到最新一题才抽新的
 function quizNext(){
   const done=quizDone();
   if(state.quiz.at<done.length-1){
-    state.quiz.at++;state.quiz.stage=0;save();renderMain();return;
+    state.quiz.at++;state.quiz.stage=0;state.quiz.favSent=false;save();renderMain();return;
   }
   quizDraw();
 }
@@ -2411,7 +2415,7 @@ function quizPrev(){
   const b=quizBat(),done=quizDone();
   const at=Math.min(state.quiz.at,done.length);
   if(at<=b.start)return;
-  state.quiz.at=at-1;state.quiz.stage=0;save();renderMain();
+  state.quiz.at=at-1;state.quiz.stage=0;state.quiz.favSent=false;save();renderMain();
 }
 function quizNextBatch(){
   const b=quizBat();
@@ -2488,18 +2492,25 @@ function renderQuiz(){
   const sc=state.quiz.scope||[];
   const rev=revActive();
   const isD=quizIsDaily();
+  const isF=quizIsFav();
   let chips='<button class="chip'+(sc.length?'':' on')+'" data-g="__all__">全部</button>';
   quizGroups().forEach(g=>{
     const n=state.answers.filter(a=>groupOf(a)===g&&quizTitled(a)).length;
-    chips+='<button class="chip'+(!isD&&sc.indexOf(g)>=0?' on':'')+'" data-g="'+escAttr(g)+'">'
+    chips+='<button class="chip'+(!isD&&!isF&&sc.indexOf(g)>=0?' on':'')+'" data-g="'+escAttr(g)+'">'
       +escHtml(g)+' <span style="opacity:.6">'+n+'</span></button>';
   });
-  // 日常用语自成一个资源库，选了它就不混卡片；两边各记各的进度，
+  // 日常用语、收藏的卡片各自成一个资源库，选了就不混别的；各记各的进度，
   // 再点一下就回到刚才那套分组选择
   const nd=state.daily.filter(dailyAskable).length;
-  if(nd)chips+='<span class="sep"></span><button class="chip'+(isD?' on':'')+'" data-g="'+QDAILY+'"'
+  const nf=state.answers.filter(a=>quizTitled(a)&&a.fav).length;
+  let special='';
+  if(nd)special+='<button class="chip'+(isD?' on':'')+'" data-g="'+QDAILY+'"'
     +' title="日常用语单独一套进度，再点一下回到刚才的卡片范围">日常用语'
     +' <span style="opacity:.6">'+nd+'</span></button>';
+  if(nf)special+='<button class="chip'+(isF?' on':'')+'" data-g="'+QFAV+'"'
+    +' title="只抽卡片级收藏的卡片，单独复习不熟的；再点一下回到刚才的范围">★ 收藏'
+    +' <span style="opacity:.6">'+nf+'</span></button>';
+  if(special)chips+='<span class="sep"></span>'+special;
   const size=quizSize();
   const bsz='<div class="quiz-batch"><span class="lab">每批</span>'
     +'<button id="bszDn" aria-label="减少">−</button>'
@@ -2535,13 +2546,19 @@ function renderQuiz(){
     if(cur){
       const hasCue=!!String(cur.cueText||'').trim();
       const hasFull=!!String(cur.fullText||'').trim();
+      const hasFavSent=(cur.sentFavs||[]).length>0;   // per-segment favourites on this card
       const st=state.quiz.stage;
+      const favOnly=!!state.quiz.favSent;
       qHtml='<h1 class="quiz-q">'+escHtml(quizAsk(cur))+'</h1>';
       const cueOff=(st>=1||!hasCue)?' disabled':'';
-      const fullOff=(st>=2||!hasFull||(st<1&&hasCue))?' disabled':'';
+      // 回答全文 / 只看收藏 是同一层的两种展开：都要求先过关键词（若有），
+      // 展开后两个按钮互为切换（当前在哪个，哪个就置灰）
+      const fullOff=(!hasFull||(st<1&&hasCue)||(st>=2&&!favOnly))?' disabled':'';
+      const favSentOff=(!hasFull||!hasFavSent||(st<1&&hasCue)||(st>=2&&favOnly))?' disabled':'';
       acts='<button class="btn" id="qPrev"'+(at>b.start?'':' disabled')+'>上一题</button>'
         +'<button class="btn" id="qCue"'+cueOff+'>关键词</button>'
         +'<button class="btn" id="qFull"'+fullOff+'>回答全文</button>'
+        +'<button class="btn" id="qFavSent"'+favSentOff+'>只看收藏</button>'
         +'<button class="btn primary" id="qNext">下一题</button>';
       // 背到一半发现要改：直接开同一个编辑弹窗，存完回到这一题。
       // 星标收藏当前卡片，用的是卡片本身的 fav（和卡片库 ★收藏、日常板块的星标同一个），
@@ -2556,15 +2573,16 @@ function renderQuiz(){
         body+='<div class="cuebox"><span class="cue-lab">关键词</span>'+spacesToHtml(cur.cueText.trim())+'</div>';
       if(st>=2&&hasFull){
         const parsed=parseCuts(cur.fullText||'');
+        // 只看收藏：整段挖空练习卡里只留下按段收藏的句子，其余隐去
         body+='<div class="card" id="practiceCard">'
-          +renderFull(parsed.text,parsed.cuts,{set:new Set(cur.sentFavs||[]),only:false},
+          +renderFull(parsed.text,parsed.cuts,{set:new Set(cur.sentFavs||[]),only:(favOnly&&hasFavSent)},
                       parseIpa(cur.ipaText||''),alignTrans(parsed.text,cur.transText||''))
           +'</div>';
       }
     }else{
       const back=inB>0?'<button class="btn" id="qPrev">上一题</button>':'';
-      // 一批抽完后，可以单独复习这一范围里收藏的卡片（不在复习中时才提供，避免复习套复习）
-      const favN=rev?0:pool.filter(x=>x&&x.fav).length;
+      // 一批抽完后，可以单独复习这一范围里收藏的卡片（不在复习中、也不在收藏范围里时才提供）
+      const favN=(rev||quizIsFav())?0:pool.filter(x=>x&&x.fav).length;
       const favBtn=favN?'<button class="btn" id="qFavRev">复习收藏的（'+favN+'）</button>':'';
       if(!quizRemaining().length){
         if(rev){
@@ -2595,13 +2613,20 @@ function renderQuiz(){
           // back to whatever set of groups was selected before
           state.quiz.scope=(state.quiz.lastScope||[]).slice();
         }else{
-          state.quiz.lastScope=(state.quiz.scope||[]).slice();
+          if(!quizIsFav())state.quiz.lastScope=(state.quiz.scope||[]).slice();
           state.quiz.scope=[QDAILY];
+        }
+      }else if(g===QFAV){
+        if(quizIsFav()){
+          state.quiz.scope=(state.quiz.lastScope||[]).slice();
+        }else{
+          if(!quizIsDaily())state.quiz.lastScope=(state.quiz.scope||[]).slice();
+          state.quiz.scope=[QFAV];
         }
       }else if(g==='__all__')state.quiz.scope=[];
       else{
-        // picking a group leaves the daily pool, the two never mix
-        const s=(quizIsDaily()?[]:(state.quiz.scope||[])).slice(),i=s.indexOf(g);
+        // picking a group leaves the daily / favourite pool, they never mix
+        const s=((quizIsDaily()||quizIsFav())?[]:(state.quiz.scope||[])).slice(),i=s.indexOf(g);
         if(i>=0)s.splice(i,1);else s.push(g);
         state.quiz.scope=s;
       }
@@ -2619,8 +2644,9 @@ function renderQuiz(){
   });
   on('qFav',()=>{if(!cur)return;cur.fav=!cur.fav;save();renderMain();});
   on('qFavRev',quizStartFavReview);
-  on('qCue',()=>{state.quiz.stage=1;save();renderMain();});
-  on('qFull',()=>{state.quiz.stage=2;save();renderMain();});
+  on('qCue',()=>{state.quiz.stage=1;state.quiz.favSent=false;save();renderMain();});
+  on('qFull',()=>{state.quiz.stage=2;state.quiz.favSent=false;save();renderMain();});
+  on('qFavSent',()=>{state.quiz.stage=2;state.quiz.favSent=true;save();renderMain();});
   on('qNext',quizNext);
   on('qPrev',quizPrev);
   on('qStart',quizDraw);
