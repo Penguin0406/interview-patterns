@@ -198,44 +198,6 @@
   .card p{margin:0 0 1.1em;}
   .card p:last-child{margin-bottom:0;}
 
-  /* target = plain text, no colored background; a small number prefixes each item */
-  .num{font-family:var(--mono);font-size:.6em;font-weight:600;color:var(--muted);
-       vertical-align:.55em;margin:0 3px 0 1px;user-select:none;}
-  .hl{position:relative;cursor:pointer;}
-  .hl:hover{text-decoration:underline dotted var(--faint);text-underline-offset:4px;}
-  /* pinned / global inline zh */
-  .hl.pinned::after,.card.show-zh .hl::after{
-    content:attr(data-zh);font-family:var(--sans);font-size:.62em;font-weight:500;
-    margin-left:6px;padding:1px 6px;border-radius:5px;vertical-align:2px;
-    background:var(--chip);color:var(--muted);white-space:nowrap;text-decoration:none;
-  }
-  /* hover tooltip (desktop) */
-  .hl[data-zh]:not([data-zh=""]):hover::before{
-    content:attr(data-zh);position:absolute;left:50%;bottom:calc(100% + 7px);
-    transform:translateX(-50%);font-family:var(--sans);font-size:calc(12.5px * var(--fs));line-height:1.4;
-    background:var(--ink);color:var(--on-ink-fg);padding:6px 10px;border-radius:8px;white-space:nowrap;
-    z-index:5;pointer-events:none;box-shadow:0 3px 12px rgba(0,0,0,.22);
-  }
-  .card.show-zh .hl:hover::before,.hl.pinned:hover::before{display:none;}
-
-  /* blank */
-  .blank{
-    display:inline-block;vertical-align:bottom;min-width:1.7em;max-width:var(--w,6ch);
-    overflow:hidden;white-space:nowrap;
-    border-bottom:1.7px solid var(--faint);line-height:1.2;cursor:pointer;
-    transition:border-color .14s;
-  }
-  .blank .bt{visibility:hidden;} /* truly not rendered: survives forced-colors / high contrast */
-  .blank:hover{border-bottom-color:var(--ink);}
-  .blank.revealed,.card.reveal-blanks .blank{
-    max-width:none;overflow:visible;white-space:normal;color:var(--muted);border-bottom-color:var(--line);
-  }
-  .blank.revealed .bt,.card.reveal-blanks .blank .bt{visibility:visible;}
-  /* per-sentence reveal dot */
-  .sbtn{border:none;background:none;cursor:pointer;font-family:var(--sans);
-        color:var(--faint);padding:0 4px;margin-left:3px;font-size:.78em;
-        display:inline-block;vertical-align:middle;line-height:1;border-radius:6px;}
-  .sbtn::before{content:"○";}
   .fstar{border:none;background:none;cursor:pointer;font-family:var(--sans);
          color:var(--faint);padding:0 4px;margin-left:1px;font-size:.72em;
          display:inline-block;vertical-align:middle;line-height:1;border-radius:6px;}
@@ -244,54 +206,18 @@
   .fstar:hover{color:var(--ink);background:var(--hover);}
   .fstar.on{color:var(--pat-ink);}
   .sent-off,.sent-off *{visibility:hidden !important;}
-  .bw{position:relative;display:inline-block;}
-  .bw[data-zh]:not([data-zh=""]):hover::before,
-  .bw[data-zh]:not([data-zh=""]).tapped::before{
-    content:attr(data-zh);position:absolute;left:50%;bottom:calc(100% + 7px);
-    transform:translateX(-50%);font-family:var(--sans);font-size:calc(12.5px * var(--fs));line-height:1.4;
-    background:var(--ink);color:var(--on-ink-fg);padding:6px 10px;border-radius:8px;white-space:nowrap;
-    z-index:7;pointer-events:none;box-shadow:0 3px 12px rgba(0,0,0,.22);}
-  .ipa{border-bottom:1px dotted var(--faint);cursor:help;position:relative;}
   .sent{position:relative;}
-  .ipa[data-ipa]:hover::after,.sent[data-tr]:hover::after,
-  .ipa[data-ipa].tapped::after,.sent[data-tr].tapped::after{
-    content:attr(data-ipa);position:absolute;left:50%;bottom:calc(100% + 7px);
+  .sent[data-tr]:hover::after,.sent[data-tr].tapped::after{
+    content:attr(data-tr);position:absolute;left:50%;bottom:calc(100% + 7px);
     transform:translateX(-50%);font-family:var(--sans);font-size:calc(12.5px * var(--fs));line-height:1.45;
     background:var(--ink);color:var(--on-ink-fg);padding:6px 10px;border-radius:8px;
     z-index:6;pointer-events:none;box-shadow:0 3px 12px rgba(0,0,0,.22);
     max-width:min(420px,80vw);width:max-content;white-space:normal;text-align:left;}
-  .sent[data-tr]:hover::after,.sent[data-tr].tapped::after{content:attr(data-tr);}
-  /* a word's phonetics wins over the sentence translation, hover or tap */
-  .sent[data-tr]:has(.ipa:hover)::after,
-  .sent[data-tr]:has(.ipa.tapped)::after{display:none;}
-  .ipa.tapped{background:var(--chip);border-radius:4px;}
-  .sbtn.zh::before{content:"◐";}
-  .sbtn.on::before{content:"●";}
-  .sbtn:hover{color:var(--ink);background:var(--hover);}
-  .sbtn.zh{color:var(--pat-ink);}
-  .sbtn.on{color:var(--phr-ink);}
-  /* the blank stays masked and its meaning sits beside it: either one sentence
-     at a time via the dot (.zh-on) or the whole card at once (.reveal-zh) */
-  .bw.zh-on::after,.card.reveal-zh .bw.zh1::after{
-    content:attr(data-zh);font-family:var(--sans);font-size:.62em;font-weight:500;
-    margin-left:5px;padding:1px 6px;border-radius:5px;vertical-align:2px;
-    background:var(--chip);color:var(--muted);white-space:normal;}
-  /* specificity has to match the .bw tooltip rules above, or the chip and the
-     bubble would both show on hover */
-  .bw.zh-on[data-zh]:hover::before,.bw.zh-on[data-zh].tapped::before,
-  .card.reveal-zh .bw.zh1[data-zh]:hover::before,
-  .card.reveal-zh .bw.zh1[data-zh].tapped::before{display:none;}
   @media (forced-colors:active){
-    .blank{border-bottom-width:2px;}
     /* high-contrast mode strips custom slider styling: fall back to the native control */
     #pSeek{-webkit-appearance:auto;appearance:auto;height:auto;background:none;border:none;}
   }
 
-  /* footnote for unmatched items */
-  .footnote{margin-top:16px;font-family:var(--sans);font-size:calc(12px * var(--fs));color:var(--muted);
-            line-height:1.6;padding:11px 14px;background:var(--panel);border:1px dashed var(--line-strong);
-            border-radius:10px;}
-  .footnote b{color:var(--ink);font-weight:500;}
 
 
   /* ---------- 抽背 ---------- */
@@ -300,9 +226,6 @@
   body.quiz-mode .app{grid-template-columns:1fr;grid-template-rows:auto 1fr;height:auto;min-height:100vh;}
   body.quiz-mode .side{border-right:none;border-bottom:1px solid var(--line);}
   body.quiz-mode .side-tools,body.quiz-mode .qlist,body.quiz-mode .side-search{display:none;}
-  /* the top bar now runs the full width: keep its right edge clear of the
-     stopwatch, which floats at the top right */
-  body.quiz-mode .side-head{padding-right:calc(64px * var(--fs));}
   body.quiz-mode #listToggle{display:none;}
   .quiz-scope{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:18px;}
   .quiz-scope .chip{border:1px solid var(--line-strong);background:var(--card);color:var(--muted);
@@ -430,7 +353,6 @@
   .pb-en.masked .pbt{border-bottom:1.7px solid var(--faint);}
   .pb-en.masked .pbt .bt{visibility:hidden;}
   .pb-main:hover .pb-en.masked .pbt{border-bottom-color:var(--ink);}
-  .pb-add textarea{flex:1.2;min-width:170px;resize:vertical;font-size:calc(13px * var(--fs));line-height:1.4;}
   .pb-zh{font-family:var(--sans);font-size:calc(14.5px * var(--fs));color:var(--ink);line-height:1.75;
          overflow-wrap:break-word;padding-top:calc(2px * var(--fs));}
   .pb-act{border:none;background:none;color:var(--faint);cursor:pointer;font-size:calc(13px * var(--fs));
@@ -444,35 +366,6 @@
   .daily-zone .qitem-title{font-family:var(--serif);font-size:calc(15.5px * var(--fs));font-weight:600;}
   .daily-count{font-family:var(--mono);font-size:calc(11px * var(--fs));color:var(--muted);}
 
-  /* ---------- study stopwatch ---------- */
-  .stopwatch{position:fixed;top:12px;right:14px;z-index:45;font-family:var(--sans);touch-action:none;}
-  .stopwatch.sw-drag{opacity:.9;}
-  .stopwatch.sw-drag *{user-select:none;-webkit-user-select:none;}
-  .sw-tab{display:none;border:1px solid var(--line-strong);background:var(--card);color:var(--muted);
-          width:34px;height:34px;border-radius:10px;cursor:pointer;font-size:calc(15px * var(--fs));}
-  .sw-tab:hover{color:var(--ink);}
-  .stopwatch.collapsed .sw-tab{display:block;}
-  .stopwatch.collapsed .sw-body{display:none;}
-  .sw-body{background:var(--card);border:1px solid var(--line-strong);border-radius:12px;
-           padding:9px 11px;min-width:150px;box-shadow:0 2px 10px rgba(0,0,0,.10);}
-  .sw-time{font-family:var(--mono);font-size:calc(19px * var(--fs));font-weight:600;color:var(--ink);
-           text-align:center;letter-spacing:.5px;cursor:grab;}
-  .stopwatch.sw-drag .sw-time{cursor:grabbing;}
-  .sw-time.running{color:var(--pat-ink);}
-  .sw-btns{display:flex;gap:5px;margin-top:7px;}
-  .sw-btns .btn{padding:4px 8px;font-size:calc(12px * var(--fs));flex:0 0 auto;}
-  .sw-btns #swToggle{flex:1;}
-  .sw-list{margin-top:8px;border-top:1px solid var(--line);padding-top:7px;
-           max-height:190px;overflow-y:auto;font-family:var(--mono);font-size:calc(11.5px * var(--fs));color:var(--muted);
-           touch-action:pan-y;}
-  .sw-list[hidden]{display:none;}
-  .sw-row{display:flex;justify-content:space-between;gap:10px;padding:2px 0;}
-  .sw-row b{color:var(--ink);font-weight:600;}
-  @media (max-width:820px){
-    .stopwatch{top:8px;right:8px;}
-    .sw-body{min-width:132px;padding:7px 9px;}
-    .sw-time{font-size:calc(17px * var(--fs));}
-  }
   .fsctl{display:inline-flex;align-items:center;gap:3px;flex:0 0 auto;}
   .fsctl button{border:1px solid var(--line-strong);background:var(--card);color:var(--muted);
                 border-radius:8px;padding:5px 8px;line-height:1;cursor:pointer;}
@@ -565,7 +458,6 @@
     .qitem{margin-bottom:6px;}
     .cnt button{width:24px;height:24px;font-size:calc(14px * var(--fs));}
     .cnt-n{font-size:calc(12.5px * var(--fs));min-width:20px;}
-    .sbtn{font-size:.86em;padding:3px 6px;}
     .abtn{font-size:.86em;padding:3px 6px;}
     .fstar{font-size:.8em;padding:3px 6px;}
     .player{position:fixed;left:10px;right:10px;bottom:calc(10px + env(safe-area-inset-bottom));
@@ -589,7 +481,6 @@
     .aux{margin-left:0;width:100%;}
     .toggle{padding:7px 11px;}
     .card{padding:18px 15px;font-size:calc(16.5px * var(--fs));line-height:1.95;border-radius:12px;}
-    .footnote{font-size:calc(11.5px * var(--fs));}
     /* editor modal */
     .overlay{padding:12px 8px;align-items:stretch;}
     .modal{max-width:none;border-radius:14px;display:flex;flex-direction:column;max-height:calc(100vh - 24px);}
@@ -604,19 +495,6 @@
 </style>
 </head>
 <body>
-<div class="stopwatch" id="sw">
-  <button class="sw-tab" id="swTab" title="学习计时" aria-label="展开学习计时">⏱</button>
-  <div class="sw-body">
-    <div class="sw-time" id="swTime" title="拖动可移动位置，双击复位">0:00</div>
-    <div class="sw-btns">
-      <button class="btn" id="swToggle">开始</button>
-      <button class="btn ghost" id="swHist" title="历史记录">📅</button>
-      <button class="btn ghost" id="swReset" title="清零今天">↺</button>
-      <button class="btn ghost" id="swHide" title="收起">✕</button>
-    </div>
-    <div class="sw-list" id="swList" hidden></div>
-  </div>
-</div>
 <div class="app">
   <aside class="side">
     <div class="side-head">
@@ -751,14 +629,6 @@
           <button type="button" id="typePhr">日常用语</button>
         </div>
       </div>
-      <details class="quick" id="quickPaste">
-        <summary>快速粘贴（按你的原格式一次填入）</summary>
-        <div class="qbody">
-          <textarea class="f" id="pasteBox" rows="7" placeholder="把「问题 / **句型** / **短语** / 回答全文」整段粘进来，点下面的按钮自动拆分填入。"></textarea>
-          <div style="margin-top:10px;"><button class="btn" id="parseBtn">解析并填入</button></div>
-        </div>
-      </details>
-
       <div class="field" id="cueField">
         <label>关键词提示</label>
         <div class="desc">全文界面会把它放在正文上方，用来看着关键词回忆内容。怎么写都行，换行会保留。</div>
@@ -793,21 +663,6 @@
         <input class="f" id="fGroup" list="groupList" placeholder="例：实习总体介绍">
         <datalist id="groupList"></datalist>
       </div>
-      <div class="field" id="ipaField">
-        <label>音标</label>
-        <div class="desc">每行一个，格式：word = 音标。不影响句型短语的匹配与切分，悬停单词即可看到。</div>
-        <textarea class="f" id="fIpa" rows="4" placeholder="niche = /niːʃ/"></textarea>
-      </div>
-      <div class="field" id="patField">
-        <label>句型（每行一个）</label>
-        <div class="desc">格式：<code>English text (中文)</code>，用 <code>...</code> 表示可替换的空位。中文可留空。</div>
-        <textarea class="f" id="fPatterns" rows="6" placeholder="... is a SaaS company in a pretty niche ... space (...是一家处于相当小众...领域的 SaaS 公司)"></textarea>
-      </div>
-      <div class="field" id="phrField">
-        <label>短语（每行一个）</label>
-        <div class="desc">格式：<code>English (中文)</code>。中文可留空。</div>
-        <textarea class="f" id="fPhrases" rows="6" placeholder="go-to-market motion (市场进入打法)"></textarea>
-      </div>
     </div>
     <div class="modal-foot">
       <button class="btn ghost linkbtn danger" id="deleteBtn" style="display:none;">删除这条</button>
@@ -820,136 +675,11 @@
 
 <script>
 /* ============================================================
-   Matching engine  (verified against the seed data in Node)
-   ============================================================ */
-const IRREGULARS=[
-  ['bring','brings','bringing','brought'],['make','makes','making','made'],
-  ['take','takes','taking','took','taken'],['get','gets','getting','got','gotten'],
-  ['go','goes','going','went','gone'],['have','has','having','had'],
-  ['do','does','doing','did','done'],['see','sees','seeing','saw','seen'],
-  ['build','builds','building','built'],['send','sends','sending','sent'],
-  ['find','finds','finding','found'],['keep','keeps','keeping','kept'],
-  ['run','runs','running','ran'],['begin','begins','beginning','began','begun'],
-  ['buy','buys','buying','bought'],['think','thinks','thinking','thought'],
-  ['lead','leads','leading','led'],['grow','grows','growing','grew','grown'],
-  ['drive','drives','driving','drove','driven'],['sell','sells','selling','sold'],
-];
-const APOS="['\\u2018\\u2019\\u02BC]";
-function normApos(s){return s.replace(/[\u2018\u2019\u02BC]/g,"'").replace(/[\u201C\u201D]/g,'"');}
-function esc(s){return s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');}
-function apFlex(escaped){return escaped.replace(/'/g,APOS);} // regex accepts straight or curly apostrophe
-function coreFragment(core){
-  // core comes from a normApos'd query, so apostrophes here are straight
-  let base=core,poss='';
-  const pm=base.match(/^([A-Za-z]{2,})('s|s'|')$/i); // possessive tail: word's / words' / word'
-  if(pm){base=pm[1];poss='(?:'+APOS+'?[sS]?|[sS]?'+APOS+'?)';}
-  const low=base.toLowerCase();
-  for(const g of IRREGULARS){if(g.includes(low))return '(?:'+g.map(esc).join('|')+')'+poss;}
-  const pure=/^[a-z]+$/.test(low);
-  if(!pure||low.length<=3)return apFlex(esc(base))+poss; // short, or contains ' (it's, don't): exact but apostrophe-flexible
-  let stem=low;
-  for(const sf of ['ing','es','ed','s','d']){if(stem.length-sf.length>=2&&stem.endsWith(sf)){stem=stem.slice(0,-sf.length);break;}}
-  return esc(stem)+'[a-z]{0,3}'+poss;
-}
-function buildRegex(query){
-  const cores=normApos(query).trim().split(/[^A-Za-z0-9']+/).filter(Boolean);
-  if(!cores.length)return null;
-  const body=cores.map(coreFragment).join('[^A-Za-z0-9]+');
-  try{return new RegExp('(?<![A-Za-z0-9])'+body+'(?![A-Za-z0-9])','gi');}
-  catch(e){return new RegExp(body,'gi');}
-}
-function findAfter(text,query,cursor){
-  const re=buildRegex(query);if(!re)return null;re.lastIndex=cursor||0;
-  const m=re.exec(text);return m?{start:m.index,end:m.index+m[0].length}:null;
-}
-function findAll(text,query){
-  const re=buildRegex(query);if(!re)return[];
-  const out=[];let m,guard=0;
-  while((m=re.exec(text))&&guard++<800){out.push({start:m.index,end:m.index+m[0].length});if(m.index===re.lastIndex)re.lastIndex++;}
-  return out;
-}
-const CLAUSE_SEP=/[,，;；]/;
-// literal segments of a pattern, each with its offset inside the pattern text
-function patternLiterals(p){
-  const out=[];const re=/\s*(?:\.\.\.|…)\s*/g;let last=0,m;
-  const add=(raw,off)=>{const t=raw.trim();if(t)out.push({t:t,at:off+raw.indexOf(t)});};
-  while((m=re.exec(p))){add(p.slice(last,m.index),last);last=m.index+m[0].length;}
-  add(p.slice(last),last);
-  return out;
-}
-// A long pattern usually chains two clauses with a comma and its Chinese does the
-// same. When both sides split into the same number of clauses, each literal
-// segment carries only its own clause, so a blanked pattern shows the half of the
-// meaning that belongs where the blank is instead of the whole sentence at every
-// gap. Bail out unless the split is clean: a literal segment that straddles a
-// comma covers both clauses at once and would be labelled with only the first.
-function attachClauseZh(spans,p,lits,zh){
-  if(!spans||!spans.length)return;
-  const parts=String(zh||'').split(new RegExp(CLAUSE_SEP.source,'g')).map(s=>s.trim()).filter(Boolean);
-  if(parts.length<2)return;
-  const cuts=[];{const re=new RegExp(CLAUSE_SEP.source,'g');let m;while((m=re.exec(p)))cuts.push(m.index);}
-  if(cuts.length+1!==parts.length)return;
-  // a comma sitting at the very start of a segment is that segment's own lead-in,
-  // not a straddle
-  for(const l of lits)
-    for(const c of cuts)
-      if(c>l.at&&c<l.at+l.t.length)return;
-  spans.forEach(sp=>{
-    const l=lits[sp.li];if(!l)return;
-    const w=l.t.search(/[A-Za-z0-9\u00C0-\u017F]/);
-    const pos=l.at+(w>0?w:0);
-    let n=0;while(n<cuts.length&&cuts[n]<pos)n++;
-    sp.zh=parts[Math.min(n,parts.length-1)];
-  });
-}
-function matchPattern(text,pat,zh){
-  const p=normApos(pat);
-  const lits=patternLiterals(p);
-  const r=bestAlignment(text,lits.map(l=>l.t));
-  attachClauseZh(r.spans,p,lits,zh);
-  return r;
-}
-// Try every occurrence of the first literal as an anchor and keep the best
-// alignment (most literals matched, then most compact). A greedy first-hit
-// anchor misfires when an earlier sentence repeats the opening words.
-function bestAlignment(text,lits){
-  if(!lits.length)return {spans:[],matched:false};
-  const starts=findAll(text,lits[0]);
-  if(!starts.length){
-    const spans=[];let cursor=0;
-    for(let i=1;i<lits.length;i++){const sp=findAfter(text,lits[i],cursor);if(sp){sp.li=i;spans.push(sp);cursor=sp.end;}}
-    return {spans,matched:spans.length>0};
-  }
-  // a pattern normally describes ONE sentence, so prefer alignments that stay
-  // inside a single sentence before falling back to compactness
-  const sents=sentenceSpans(text);
-  const sentOf=pos=>{for(let i=0;i<sents.length;i++)if(pos>=sents[i].start&&pos<sents[i].end)return i;return -1;};
-  let best=null;
-  for(const st of starts){
-    st.li=0;
-    const spans=[st];let cursor=st.end;
-    for(let i=1;i<lits.length;i++){
-      const sp=findAfter(text,lits[i],cursor);
-      if(sp){sp.li=i;spans.push(sp);cursor=sp.end;}
-    }
-    const width=spans[spans.length-1].end-spans[0].start;
-    const crossed=new Set(spans.map(s=>sentOf(s.start))).size-1;
-    const cand={spans,width,crossed};
-    if(!best
-       ||cand.spans.length>best.spans.length
-       ||(cand.spans.length===best.spans.length&&cand.crossed<best.crossed)
-       ||(cand.spans.length===best.spans.length&&cand.crossed===best.crossed&&cand.width<best.width))
-      best=cand;
-  }
-  return {spans:best.spans,matched:best.spans.length>0};
-}
-
-/* ============================================================
    State + storage
    ============================================================ */
 const LS_KEY='interview_practice_v1';
 const DEF_TITLE='流畅表达任何事';
-let state={answers:[],selectedId:null,view:'quiz',quiz:null,builtinGone:[],builtinRegroup:0,mode:'full',showZh:false,revealAll:false,revealZh:false,pbRevealAll:false,openGroup:null,pbShowZh:false,pbFavOnly:false,pbMode:'pattern',daily:[],dailyOpen:null,appTitle:DEF_TITLE,favOnlySent:false,groupOrder:[],groups:[],folders:[],groupFolder:{},openFolder:null,cardSearch:'',dailySearch:''};
+let state={answers:[],selectedId:null,view:'quiz',quiz:null,builtinGone:[],builtinRegroup:0,strippedLegacy:0,pbRevealAll:false,openGroup:null,pbShowZh:false,pbFavOnly:false,pbMode:'pattern',daily:[],appTitle:DEF_TITLE,favOnlySent:false,groupOrder:[],groups:[],folders:[],groupFolder:{},openFolder:null,cardSearch:'',dailySearch:''};
 // 抽背进度：done / round / size / bat 都按资源库（已选分组的组合）分开记。
 // done 是本轮抽过的顺序，at 是当前看的是其中第几题（等于 done.length 时
 // 表示停在提示页，而不是某一题），bat 记当前这一批从哪里开始。
@@ -1278,32 +1008,6 @@ function seedData(){
     id:uid(),
     title:'Sonio GTM 介绍',
     group:'实习总体介绍',
-    patterns:[
-      {en:'... is a SaaS company in a pretty niche ... space',zh:'...是一家处于相当小众...领域的 SaaS 公司'},
-      {en:'its audience was quite fixed and well defined',zh:'它的受众相当固定且明确'},
-      {en:'Because of that, our main ... motion was ...',zh:'正因如此，我们主要的...打法是...'},
-      {en:"it's more efficient to ... than ...",zh:'...比...更高效'},
-      {en:'they handled the top of the funnel and brought leads in',zh:'它们负责漏斗顶端并带来线索'},
-      {en:'we use it for ... and ...',zh:'我们用它来做...和...'},
-    ],
-    phrases:[
-      {en:'a pretty niche medical space',zh:'一个相当小众的医疗领域'},
-      {en:'fixed and well defined',zh:'固定且明确的'},
-      {en:'go-to-market motion',zh:'市场进入打法，GTM 打法'},
-      {en:'sales-led outbound',zh:'以销售为主导的 outbound'},
-      {en:'known target accounts',zh:'已知的目标客户'},
-      {en:'wait for inbound',zh:'等待自主上门的线索'},
-      {en:'the highest pipeline conversion rate',zh:'最高的管道转化率'},
-      {en:'digital inbound',zh:'数字化 inbound 渠道'},
-      {en:'paid ads',zh:'付费广告'},
-      {en:'the top of the funnel',zh:'漏斗顶端'},
-      {en:'bring leads in',zh:'带来/引入线索'},
-      {en:'cold outbound',zh:'陌生开发触达'},
-      {en:'nurture sequences',zh:'培育型邮件序列'},
-      {en:'certain persona',zh:'特定的客户画像'},
-      {en:'push them down in the funnel',zh:'推动他们向漏斗下游移动'},
-      {en:'make the first contact',zh:'建立首次联系'},
-    ],
     fullText:
 "Sonio is a SaaS company in a pretty niche medical space, which means its audience was quite fixed and well defined.\n\n"+
 "Because of that, our main go-to-market motion was sales-led outbound, because it's more efficient to reach out to known target accounts than wait for inbound.\n\n"+
@@ -1319,7 +1023,7 @@ function migratePhrasebooks(){
   let changed=false;
   state.answers=state.answers.filter(a=>{
     if(a&&a.type==='phrasebook'){
-      (a.items||[]).forEach(it=>state.daily.push({id:uid(),fullText:it.en||'',zh:it.zh||'',patterns:[],phrases:[],fav:!!it.fav}));
+      (a.items||[]).forEach(it=>state.daily.push({id:uid(),fullText:it.en||'',zh:it.zh||'',fav:!!it.fav}));
       if(state.selectedId===a.id)state.selectedId='__daily__';
       changed=true;return false;
     }
@@ -1331,13 +1035,11 @@ function load(){
   try{
     const raw=localStorage.getItem(LS_KEY);
     if(raw){const d=JSON.parse(raw);state.answers=d.answers||[];state.selectedId=d.selectedId||null;
-      if('showZh'in d)state.showZh=d.showZh;
       if('openGroup'in d)state.openGroup=d.openGroup;
       if('pbShowZh'in d)state.pbShowZh=d.pbShowZh;
       if('pbFavOnly'in d)state.pbFavOnly=d.pbFavOnly;
       if(d.pbMode==='phrase'||d.pbMode==='pattern'||d.pbMode==='full')state.pbMode=d.pbMode;
       if(Array.isArray(d.daily))state.daily=d.daily;
-      if('dailyOpen'in d)state.dailyOpen=d.dailyOpen;
       if(typeof d.appTitle==='string'&&d.appTitle.trim())state.appTitle=d.appTitle.trim();
       if(Array.isArray(d.groupOrder))state.groupOrder=d.groupOrder;
       if(Array.isArray(d.groups))state.groups=d.groups;
@@ -1346,6 +1048,7 @@ function load(){
       if('openFolder'in d)state.openFolder=d.openFolder;
       if(Array.isArray(d.builtinGone))state.builtinGone=d.builtinGone.filter(x=>typeof x==='string');
       if(typeof d.builtinRegroup==='number')state.builtinRegroup=d.builtinRegroup;
+      if(typeof d.strippedLegacy==='number')state.strippedLegacy=d.strippedLegacy;
       if(d.quiz&&typeof d.quiz==='object'){
         const q=d.quiz;
         state.quiz={
@@ -1381,9 +1084,17 @@ function load(){
   // the demo card is a first-run placeholder; a real built-in bank replaces it
   if(!state.answers.length&&!state.daily.length&&!BUILTIN_CARDS.length)state.answers=seedData();
   migratePhrasebooks();
+  // one-time destructive cleanup: 句型 / 短语 / 音标 were removed from this build,
+  // so scrub those fields from any locally-stored data on first load after the upgrade
+  let didStrip=false;
+  if(!state.strippedLegacy){
+    state.answers.forEach(a=>{delete a.patterns;delete a.phrases;delete a.ipaText;});
+    state.daily.forEach(e=>{delete e.patterns;delete e.phrases;delete e.ipaText;});
+    state.strippedLegacy=1;didStrip=true;
+  }
   // seed before the selection fix below, or a fresh install with a bank but no
   // saved data would end up with cards and nothing selected
-  if(seedBuiltins()|regroupBuiltins())save();
+  if(seedBuiltins()|regroupBuiltins()|(didStrip?1:0))save();
   syncGroups();
   if(state.selectedId!=='__daily__'&&(!state.selectedId||!state.answers.find(a=>a.id===state.selectedId)))
     state.selectedId=state.answers[0]?state.answers[0].id:(state.daily.length?'__daily__':null);
@@ -1393,7 +1104,7 @@ function load(){
   }
 }
 function save(){
-  try{localStorage.setItem(LS_KEY,JSON.stringify({answers:state.answers,selectedId:state.selectedId,showZh:state.showZh,openGroup:state.openGroup,pbShowZh:state.pbShowZh,pbFavOnly:state.pbFavOnly,pbMode:state.pbMode,daily:state.daily,dailyOpen:state.dailyOpen,appTitle:state.appTitle,groupOrder:state.groupOrder,groups:state.groups,folders:state.folders,groupFolder:state.groupFolder,openFolder:state.openFolder,quiz:state.quiz,builtinGone:state.builtinGone,builtinRegroup:state.builtinRegroup}));}catch(e){}
+  try{localStorage.setItem(LS_KEY,JSON.stringify({answers:state.answers,selectedId:state.selectedId,openGroup:state.openGroup,pbShowZh:state.pbShowZh,pbFavOnly:state.pbFavOnly,pbMode:state.pbMode,daily:state.daily,appTitle:state.appTitle,groupOrder:state.groupOrder,groups:state.groups,folders:state.folders,groupFolder:state.groupFolder,openFolder:state.openFolder,quiz:state.quiz,builtinGone:state.builtinGone,builtinRegroup:state.builtinRegroup,strippedLegacy:state.strippedLegacy}));}catch(e){}
 }
 
 /* ============================================================
@@ -1403,35 +1114,7 @@ function escHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(
 function escAttr(s){return escHtml(s).replace(/"/g,'&quot;');}
 function spacesToHtml(s){return escHtml(s).replace(/\n/g,'<br>');}
 
-function computeItems(answer,kind,textOverride){
-  const text=textOverride!==undefined?textOverride:(answer.fullText||'');
-  const src=kind==='pattern'?(answer.patterns||[]):(answer.phrases||[]);
-  return src.map(it=>{
-    const r=kind==='pattern'?matchPattern(text,it.en,it.zh):{spans:findAll(text,it.en)};
-    return {en:it.en,zh:it.zh||'',spans:r.spans};
-  });
-}
-
 function segKey(t){return (t||'').replace(/\s+/g,' ').trim();}
-function parseIpa(raw){
-  // one "word = phonetics" per line
-  const m=new Map();
-  (raw||'').split('\n').forEach(line=>{
-    const i=line.indexOf('=');
-    if(i<0)return;
-    const w=line.slice(0,i).trim(), v=line.slice(i+1).trim();
-    if(w&&v)m.set(w.toLowerCase(),v);
-  });
-  return m;
-}
-function wrapIpa(html,ipa){
-  // html here is already-escaped plain text; wrap known words for hover
-  if(!ipa||!ipa.size)return html;
-  return html.replace(/[A-Za-z\u00C0-\u017F][A-Za-z\u00C0-\u017F'\u2019-]*/g,w=>{
-    const v=ipa.get(w.toLowerCase().replace(/[\u2019]/g,"'"));
-    return v?'<span class="ipa" data-ipa="'+escAttr(v)+'">'+w+'</span>':w;
-  });
-}
 function alignTrans(text,transText){
   // pair the Nth source sentence with the Nth translation sentence, regardless
   // of paragraphs or line breaks; sentence ends recognised for both Latin
@@ -1460,7 +1143,7 @@ function alignTrans(text,transText){
   }
   return map;
 }
-function renderFull(text,cuts,fav,ipa,trans){
+function renderFull(text,cuts,fav,trans){
   const segs=ttsSegments(text,cuts);
   const sents=sentenceSpans(text);
   const paras=[];{
@@ -1481,7 +1164,7 @@ function renderFull(text,cuts,fav,ipa,trans){
       for(const g of mySegs){
         const gs=Math.max(g.start,ps),ge=Math.min(g.end,pe);
         if(ge<=gs)continue;
-        let segHtml=wrapIpa(spacesToHtml(text.slice(gs,ge)),ipa);
+        let segHtml=spacesToHtml(text.slice(gs,ge));
         const stext=text.slice(g.start,g.end).trim();
         const hasWords=stext.replace(/[^A-Za-z\u00C0-\u017F]/g,'').length>1;
         if(hasWords){
@@ -1576,108 +1259,6 @@ function segmentAuto(text,A,B,out){
     }
   }
   for(const [a,b] of merged)out.push({start:A+a,end:A+b});
-}
-
-function renderMasked(text,items,cuts,fav,ipa,others){
-  // owner map: first-wins
-  const owner=new Int16Array(text.length).fill(-1);
-  items.forEach((it,idx)=>it.spans.forEach(sp=>{
-    for(let i=sp.start;i<sp.end&&i<text.length;i++) if(owner[i]===-1) owner[i]=idx;
-  }));
-  // the hidden side is indexed per SPAN, not per item, so a pattern split into
-  // clauses can label each of its gaps with its own half of the Chinese
-  let ownerOther=null,otherZh=null;
-  if(others&&others.length){
-    ownerOther=new Int16Array(text.length).fill(-1);
-    otherZh=[];
-    others.forEach(it=>it.spans.forEach(sp=>{
-      const zi=otherZh.length;otherZh.push(sp.zh||it.zh||'');
-      for(let i=sp.start;i<sp.end&&i<text.length;i++) if(ownerOther[i]===-1) ownerOther[i]=zi;
-    }));
-  }
-  const paras=[];{
-    let re=/\n{2,}/g,last=0,m;
-    while((m=re.exec(text))){paras.push([last,m.index]);last=m.index+m[0].length;}
-    paras.push([last,text.length]);
-  }
-  const sents=sentenceSpans(text);
-  const seen=new Set();
-  function emitRange(rs,re2,sIdx,st){ // render one owner-chunk walk over [rs,re2)
-    let seg='',i=rs;
-    while(i<re2){
-      const o=owner[i];
-      // inside a blank, also break on the hidden side's items so a blanked
-      // pattern/phrase can carry its own zh tooltip
-      const oo=o>=0?-1:(ownerOther?ownerOther[i]:-1);
-      let j=i+1;
-      while(j<re2&&owner[j]===o&&(o>=0||(ownerOther?ownerOther[j]:-1)===oo))j++;
-      const chunk=text.slice(i,j);
-      if(o>=0){
-        const it=items[o];
-        let num='';
-        if(!seen.has(o)){seen.add(o); if(it.num) num='<span class="num">'+it.num+'.</span>';}
-        seg+=num+'<span class="hl" data-zh="'+escAttr(it.zh)+'" data-i="'+o+'">'+wrapIpa(escHtml(chunk),ipa)+'</span>';
-      }else{
-        const lead=chunk.match(/^\s*/)[0], trail=chunk.match(/\s*$/)[0];
-        const core=chunk.slice(lead.length,chunk.length-trail.length);
-        seg+=spacesToHtml(lead);
-        if(core.length){
-          if(!/[A-Za-z0-9]/.test(core)){
-            seg+=escHtml(core); // punctuation only: keep visible as glue
-          }else{
-            const w=Math.min(Math.max(core.replace(/\s+/g,' ').length,2),8);
-            const blankHtml='<span class="blank" style="--w:'+w+'ch" data-s="'+sIdx+'"><span class="bt">'+wrapIpa(escHtml(core),ipa)+'</span></span>';
-            const ozh=(oo>=0&&otherZh)?(otherZh[oo]||''):'';
-            const first=ozh&&!st.zhSeen.has(ozh);
-            if(ozh)st.zhSeen.add(ozh);
-            // .blank clips overflow, so the tooltip lives on a wrapper
-            seg+=ozh?'<span class="bw'+(first?' zh1':'')+'" data-s="'+sIdx+'" data-zh="'+escAttr(ozh)+'">'+blankHtml+'</span>':blankHtml;
-            st.hasBlank=true;
-          }
-        }
-        seg+=spacesToHtml(trail);
-      }
-      i=j;
-    }
-    return seg;
-  }
-  let html='';
-  for(const [ps,pe] of paras){
-    if(pe<=ps){continue;}
-    let seg='';
-    const allSegs=ttsSegments(text,cuts);
-    for(let s=0;s<sents.length;s++){
-      const ss=Math.max(sents[s].start,ps), se=Math.min(sents[s].end,pe);
-      if(se<=ss)continue;
-      // one meaning usually owns several gaps in a sentence; only the first of
-      // them carries the label, so a line never repeats the same Chinese
-      const st={hasBlank:false,zhSeen:new Set()};
-      let mySegs=allSegs.filter(g=>g.start>=sents[s].start&&g.end<=sents[s].end);
-      if(!mySegs.length)mySegs=[{start:sents[s].start,end:sents[s].end}];
-      let sentHtml='';
-      for(let gi=0;gi<mySegs.length;gi++){
-        const gs=Math.max(mySegs[gi].start,ps),ge=Math.min(mySegs[gi].end,pe);
-        if(ge<=gs)continue;
-        let segHtml=emitRange(gs,ge,s,st);
-        const isLastSeg=gi===mySegs.length-1;
-        if(isLastSeg&&st.hasBlank)
-          segHtml+='<button class="sbtn" data-s="'+s+'" data-stage="0" title="点一下看中文，再点看原文，第三下收起" aria-label="本句挖空：中文 / 原文 / 收起"></button>';
-        const stext=text.slice(mySegs[gi].start,mySegs[gi].end).trim();
-        if(stext.replace(/[^A-Za-z\u00C0-\u017F]/g,'').length>1){
-          segHtml+='<button class="abtn" data-t="'+escAttr(stext)+'" title="朗读这一段" aria-label="朗读这一段"></button>';
-          const k=segKey(stext);
-          const isFav=!!(fav&&fav.set.has(k));
-          segHtml+='<button class="fstar'+(isFav?' on':'')+'" data-k="'+escAttr(k)+'" title="收藏这一段" aria-label="收藏这一段"></button>';
-          // filter: non-favorited segments hide in place, keeping their position
-          if(fav&&fav.only&&!isFav)segHtml='<span class="sent-off">'+segHtml+'</span>';
-        }
-        sentHtml+=segHtml;
-      }
-      seg+=sentHtml;
-    }
-    html+='<p>'+seg+'</p>';
-  }
-  return html;
 }
 
 /* ============================================================
@@ -1990,8 +1571,6 @@ function buildCard(a,inFav){
 function cardMatches(a,q){
   if(!q)return true;
   const parts=[a.title||'',parseCuts(a.fullText||'').text,a.transText||'',a.cueText||''];
-  (a.patterns||[]).forEach(p=>{parts.push(p.en||'');parts.push(p.zh||'');});
-  (a.phrases||[]).forEach(p=>{parts.push(p.en||'');parts.push(p.zh||'');});
   return parts.join('\u0001').toLowerCase().indexOf(q)>=0;
 }
 function dailyMatches(e,q){
@@ -2025,7 +1604,7 @@ function renderSidebar(){
   const dTotal=state.daily.reduce((n,x)=>n+(x.reviews||0),0);
   dq.innerHTML='<div class="qitem-top"><div class="qitem-title">日常用语</div><span class="daily-count">'+state.daily.length+'</span></div>'
     +'<div class="qitem-meta"><span class="gsum" title="内部条目复习次数总和">Σ '+dTotal+'</span></div>';
-  dq.onclick=()=>{state.selectedId='__daily__';state.dailyOpen=null;save();renderAll();closeDrawer();};
+  dq.onclick=()=>{state.selectedId='__daily__';save();renderAll();closeDrawer();};
   dq.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();dq.click();}};
   qlist.appendChild(dq);
 
@@ -2127,7 +1706,6 @@ function deleteDaily(id,skip){
   const e=state.daily.find(x=>x.id===id);if(!e)return;
   if(!skip&&!confirm('删除这条日常用语？'))return;
   state.daily=state.daily.filter(x=>x.id!==id);
-  if(state.dailyOpen===id)state.dailyOpen=null;
   save();renderAll();
 }
 function renderDailyRowHtml(e){
@@ -2176,10 +1754,9 @@ function renderDailyBoard(){
     +'<div class="card pb-add-card"><div class="pb-add">'
     +'<input class="f" id="pbEn" placeholder="原文">'
     +'<input class="f" id="pbZhIn" placeholder="中文翻译">'
-    +'<textarea class="f" id="pbPP" rows="2" placeholder="粘贴 句型 / 短语 列表（可留空，仅用于完整练习页）"></textarea>'
     +'<button class="btn primary" id="pbAdd">添加</button>'
     +'</div></div>'
-    +'<p class="pb-hint">左边原文默认挖空，右边中文一直显示；点一下显示原文，再点收起。每个 ♪ 朗读一段（分段规则与卡片一致，含 " / " 手动切分）；拖 ⠿ 排序，› 打开完整练习页。粘贴框支持「句型/短语」自动识别，Ctrl+回车添加。</p>';
+    +'<p class="pb-hint">左边原文默认挖空，右边中文一直显示；点一下显示原文，再点收起。每个 ♪ 朗读一段（分段规则与卡片一致，含 " / " 手动切分）；拖 ⠿ 排序。回车即可添加。</p>';
   const listEl=document.getElementById('pbList');
   // repaint just the rows from current state + filters, so the search box keeps focus while typing
   function paintRows(){
@@ -2198,7 +1775,6 @@ function renderDailyBoard(){
         +'<div class="pb-en'+(state.pbRevealAll?'':' masked')+'">'+renderDailyRowHtml(e)+'</div>'
         +(zh?'<div class="pb-zh">'+spacesToHtml(zh)+'</div>':'')
         +'</div>'
-        +'<button class="pb-act pb-open" title="打开完整练习页">›</button>'
         +'<button class="pb-act pb-edit" title="编辑这条">✎</button>'
         +'<button class="pb-act pb-del" title="删除这条">✕</button>'
         +'</div>';
@@ -2228,23 +1804,14 @@ function renderDailyBoard(){
   const addRow=()=>{
     const en=document.getElementById('pbEn').value.trim();
     const zh=document.getElementById('pbZhIn').value.trim();
-    const raw=document.getElementById('pbPP').value;
     if(!en)return;
-    let patterns=[],phrases=[];
-    if(raw.trim()){
-      const r=parsePasted(raw);
-      patterns=textToItems(r.patterns.join('\n'));
-      phrases=textToItems(r.phrases.join('\n'));
-      if(!patterns.length&&!phrases.length)phrases=textToItems(raw);
-    }
-    state.daily.push({id:uid(),fullText:en,zh:zh,patterns,phrases,fav:false});
+    state.daily.push({id:uid(),fullText:en,zh:zh,fav:false});
     save();renderAll();
     setTimeout(()=>{const el=document.getElementById('pbEn');if(el)el.focus();},30);
   };
   document.getElementById('pbAdd').onclick=addRow;
   document.getElementById('pbEn').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();document.getElementById('pbZhIn').focus();}});
   document.getElementById('pbZhIn').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();addRow();}});
-  document.getElementById('pbPP').addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();addRow();}});
   listEl.addEventListener('click',e=>{
     if(e.target.closest('.abtn'))return;   // shared audio listener handles playback
     const row=e.target.closest('.pb-item');if(!row)return;
@@ -2252,7 +1819,6 @@ function renderDailyBoard(){
     const entry=state.daily.find(x=>x.id===id);if(!entry)return;
     if(e.target.closest('.pb-drag'))return;
     if(e.target.closest('.pstar')){entry.fav=!entry.fav;save();renderMain();return;}
-    if(e.target.closest('.pb-open')){state.dailyOpen=id;save();renderMain();return;}
     if(e.target.closest('.pb-edit')){openDailyEditor(id);return;}
     if(e.target.closest('.pb-del')){deleteDaily(id);return;}
     // anywhere in the pair, including the Chinese, flips the original
@@ -2576,7 +2142,7 @@ function renderQuiz(){
         // 只看收藏：整段挖空练习卡里只留下按段收藏的句子，其余隐去
         body+='<div class="card" id="practiceCard">'
           +renderFull(parsed.text,parsed.cuts,{set:new Set(cur.sentFavs||[]),only:(favOnly&&hasFavSent)},
-                      parseIpa(cur.ipaText||''),alignTrans(parsed.text,cur.transText||''))
+                      alignTrans(parsed.text,cur.transText||''))
           +'</div>';
       }
     }else{
@@ -2685,158 +2251,67 @@ function renderMain(){
   }
   document.body.classList.toggle('quiz-mode',state.view==='quiz');
   if(state.view==='quiz'){renderQuiz();return;}
-  if(state.selectedId==='__daily__'){
-    if(state.dailyOpen){
-      const e=state.daily.find(x=>x.id===state.dailyOpen);
-      if(e){renderCardView(e,true);return;}
-      state.dailyOpen=null;
-    }
-    renderDailyBoard();return;
-  }
+  if(state.selectedId==='__daily__'){renderDailyBoard();return;}
   const a=state.answers.find(x=>x.id===state.selectedId);
   if(!a){
     mainInner.innerHTML='<div class="empty"><h2>还没有内容</h2>'+
-      '<p>新建一条回答，把你写好的句型、短语和全文放进来，就能开始三种模式的挖空练习了。</p>'+
+      '<p>新建一条回答，把全文放进来，就能开始看关键词回忆、听发音练习了。</p>'+
       '<button class="btn primary" onclick="newGroup(null)">+ 新建第一个分组</button></div>';
     return;
   }
-  renderCardView(a,false);
+  renderCardView(a);
 }
-function renderCardView(a,isDaily){
-  const mode=state.mode;
+function renderCardView(a){
   const parsed=parseCuts(a.fullText||''); // markers hidden from display and matching
   const favInfo={set:new Set(a.sentFavs||[]),only:!!state.favOnlySent};
-  const ipaMap=parseIpa(a.ipaText||'');
   const transMap=alignTrans(parsed.text,a.transText||'');
-  let bodyHtml,footHtml='';
-  if(mode==='full'){
-    bodyHtml=renderFull(parsed.text,parsed.cuts,favInfo,ipaMap,transMap);
-    const cue=(a.cueText||'').trim();
-    if(cue)bodyHtml='<div class="cuebox"><span class="cue-lab">关键词</span>'+spacesToHtml(cue)+'</div>'+bodyHtml;
-  }else{
-    const kind=mode==='pattern'?'pattern':'phrase';
-    const items=computeItems(a,kind,parsed.text);
-    const others=computeItems(a,kind==='pattern'?'phrase':'pattern',parsed.text);
-    let n=0; items.forEach(it=>{ if(it.spans.length) it.num=++n; });
-    bodyHtml=renderMasked(parsed.text,items,parsed.cuts,favInfo,ipaMap,others);
-    const unmatched=items.filter(it=>it.spans.length===0);
-    if(unmatched.length){
-      footHtml='<div class="footnote">这些'+(mode==='pattern'?'句型':'短语')+'没在全文里找到，练习时已跳过（可能是措辞不同或写错）：<br>'+
-        unmatched.map(it=>'<b>'+escHtml(it.en)+'</b>'+(it.zh?'（'+escHtml(it.zh)+'）':'')).join('；')+'</div>';
-    }
-  }
-  const cardCls='card'+(state.showZh?' show-zh':'')+(state.revealAll?' reveal-blanks':'')
-    +(state.revealZh?' reveal-zh':'');
+  let bodyHtml=renderFull(parsed.text,parsed.cuts,favInfo,transMap);
+  const cue=(a.cueText||'').trim();
+  if(cue)bodyHtml='<div class="cuebox"><span class="cue-lab">\u5173\u952e\u8bcd</span>'+spacesToHtml(cue)+'</div>'+bodyHtml;
   mainInner.innerHTML=
-    (isDaily
-      ?'<button class="linkbtn" id="dailyBack" style="margin-bottom:8px;">← 返回日常用语</button>'
-      :(groupOf(a)!==UNGROUPED?'<div class="brand-sub" style="margin-bottom:6px;">'+escHtml(groupOf(a))+'</div>':''))+
-    '<h1 class="ans-title">'+escHtml(isDaily?dailyTitle(a):(a.title||'（未命名）'))+'</h1>'+
+    (groupOf(a)!==UNGROUPED?'<div class="brand-sub" style="margin-bottom:6px;">'+escHtml(groupOf(a))+'</div>':'')+
+    '<h1 class="ans-title">'+escHtml(a.title||'\uff08\u672a\u547d\u540d\uff09')+'</h1>'+
     '<div class="controls">'+
-      '<div class="seg">'+
-        '<button data-m="full" class="'+(mode==='full'?'on':'')+'">全文</button>'+
-        '<button data-m="pattern" class="'+(mode==='pattern'?'on':'')+'">句型</button>'+
-        '<button data-m="phrase" class="'+(mode==='phrase'?'on':'')+'">短语</button>'+
-      '</div>'+
       '<div class="aux">'+
-        '<button class="toggle'+(state.favOnlySent?' on':'')+'" id="tFavOnly">只看收藏</button>'+
-        '<button class="toggle'+(state.revealZh?' on':'')+'" id="tRevealZh"'+(mode==='full'?' hidden':'')+'>显示挖空中文</button>'+
-        '<button class="toggle'+(state.revealAll?' on':'')+'" id="tReveal"'+(mode==='full'?' hidden':'')+'>显示全部原文</button>'+
-        '<button class="toggle'+(state.showZh?' on':'')+'" id="tZh"'+(mode==='full'?' hidden':'')+'>显示中文</button>'+
+        '<button class="toggle'+(state.favOnlySent?' on':'')+'" id="tFavOnly">\u53ea\u770b\u6536\u85cf</button>'+
       '</div>'+
     '</div>'+
     '<div class="rowbtns">'+
-      '<button class="linkbtn" id="editInline">编辑</button>'+
-      '<button class="linkbtn danger" id="delInline">删除</button>'+
+      '<button class="linkbtn" id="editInline">\u7f16\u8f91</button>'+
+      '<button class="linkbtn danger" id="delInline">\u5220\u9664</button>'+
     '</div>'+
-    '<div class="'+cardCls+'" id="practiceCard">'+bodyHtml+'</div>'+
-    footHtml;
-
-  // wire mode buttons
-  mainInner.querySelectorAll('.seg button').forEach(b=>{
-    b.onclick=()=>{state.mode=b.dataset.m;renderMain();};
-  });
+    '<div class="card" id="practiceCard">'+bodyHtml+'</div>';
   const tF=document.getElementById('tFavOnly'); if(tF)tF.onclick=()=>{state.favOnlySent=!state.favOnlySent;renderMain();};
-  const tRz=document.getElementById('tRevealZh'); if(tRz)tRz.onclick=()=>{state.revealZh=!state.revealZh;renderMain();};
-  const tR=document.getElementById('tReveal'); if(tR)tR.onclick=()=>{state.revealAll=!state.revealAll;renderMain();};
-  const tZ=document.getElementById('tZh'); if(tZ)tZ.onclick=()=>{state.showZh=!state.showZh;save();renderMain();};
-  document.getElementById('editInline').onclick=()=>{isDaily?openDailyEditor(a.id):openEditor(a.id);};
-  document.getElementById('delInline').onclick=()=>{isDaily?deleteDaily(a.id):deleteAnswer(a.id);};
-  const db=document.getElementById('dailyBack');
-  if(db)db.onclick=()=>{state.dailyOpen=null;save();renderMain();};
-
+  document.getElementById('editInline').onclick=()=>{openEditor(a.id);};
+  document.getElementById('delInline').onclick=()=>{deleteAnswer(a.id);};
   // card interactions (delegated)
   if(typeof markCached==='function')markCached();
   bindCardInteractions(document.getElementById('practiceCard'),a);
 }
 
-// Everything a rendered practice card responds to: ♪ playback, ☆ per-segment
-// favourites, the reveal dot, blanks, IPA and pinned meanings. Split out of
-// renderCardView so any screen that renders a card gets the same behaviour.
+// Everything a rendered practice card responds to: \u266a playback, \u2606 per-segment
+// favourites, and the pinned sentence translation. Split out of renderCardView so
+// any screen that renders a card gets the same behaviour.
 function bindCardInteractions(card,a){
   if(!card)return;
-  {
-    /* the per-sentence dot cycles 0 masked -> 1 meanings -> 2 原文 -> 0 */
-    const dotBlanks=s=>card.querySelectorAll('.blank[data-s="'+s+'"]');
-    const dotZh=s=>card.querySelectorAll('.bw.zh1[data-s="'+s+'"][data-zh]:not([data-zh=""])');
-    const paintDot=(sb,stage)=>{
-      sb.dataset.stage=String(stage);
-      sb.classList.toggle('zh',stage===1);
-      sb.classList.toggle('on',stage===2);
-    };
-    const setDot=(sb,stage)=>{
-      const s=sb.dataset.s;
-      dotBlanks(s).forEach(b=>b.classList.toggle('revealed',stage===2));
-      dotZh(s).forEach(n=>n.classList.toggle('zh-on',stage===1));
-      paintDot(sb,stage);
-    };
-    // a blank tapped on its own can complete or break a stage: keep the dot honest
-    const syncDot=s=>{
-      const sb=card.querySelector('.sbtn[data-s="'+s+'"]');if(!sb)return;
-      const blanks=[...dotBlanks(s)];
-      const allRev=blanks.length>0&&blanks.every(b=>b.classList.contains('revealed'));
-      paintDot(sb,allRev?2:(card.querySelector('.bw.zh-on[data-s="'+s+'"]')?1:0));
-    };
-    card.addEventListener('click',e=>{
-      const ab=e.target.closest('.abtn');
-      if(ab){playSentence(ab,false);return;}
-      const fst=e.target.closest('.fstar');
-      if(fst){
-        const k=fst.dataset.k;
-        a.sentFavs=a.sentFavs||[];
-        const i=a.sentFavs.indexOf(k);
-        if(i>=0)a.sentFavs.splice(i,1);else a.sentFavs.push(k);
-        save();renderMain();return;
-      }
-      const sb=e.target.closest('.sbtn');
-      if(sb){
-        const cur=+(sb.dataset.stage||0);
-        // nothing in this sentence carries a meaning: skip straight to 原文
-        const hasZh=dotZh(sb.dataset.s).length>0;
-        setDot(sb,cur===0?(hasZh?1:2):(cur===1?2:0));
-        return;
-      }
-      // tap = hover on touch devices; phonetics take priority over the
-      // sentence translation, so .ipa is tested before anything text-level
-      const clearTapped=except=>card.querySelectorAll('.tapped')
-        .forEach(n=>{if(n!==except)n.classList.remove('tapped');});
-      const ip=e.target.closest('.ipa');
-      if(ip){const on=ip.classList.contains('tapped');clearTapped();ip.classList.toggle('tapped',!on);return;}
-      const bl=e.target.closest('.blank');
-      if(bl){
-        clearTapped();
-        bl.classList.toggle('revealed');
-        const bw=bl.closest('.bw');                 // blanked item: show its meaning too
-        if(bw)bw.classList.toggle('tapped',bl.classList.contains('revealed'));
-        syncDot(bl.dataset.s);return;
-      }
-      const hl=e.target.closest('.hl');
-      if(hl){clearTapped();hl.classList.toggle('pinned');return;}
-      const st=e.target.closest('.sent');
-      if(st){const on=st.classList.contains('tapped');clearTapped();st.classList.toggle('tapped',!on);return;}
-      clearTapped();
-    });
-  }
+  card.addEventListener('click',e=>{
+    const ab=e.target.closest('.abtn');
+    if(ab){playSentence(ab,false);return;}
+    const fst=e.target.closest('.fstar');
+    if(fst){
+      const k=fst.dataset.k;
+      a.sentFavs=a.sentFavs||[];
+      const i=a.sentFavs.indexOf(k);
+      if(i>=0)a.sentFavs.splice(i,1);else a.sentFavs.push(k);
+      save();renderMain();return;
+    }
+    // tap = hover on touch devices: pin / unpin the sentence translation
+    const clearTapped=except=>card.querySelectorAll('.tapped')
+      .forEach(n=>{if(n!==except)n.classList.remove('tapped');});
+    const st=e.target.closest('.sent');
+    if(st){const on=st.classList.contains('tapped');clearTapped();st.classList.toggle('tapped',!on);return;}
+    clearTapped();
+  });
 }
 
 function renderAll(){renderSidebar();renderMain();}
@@ -2852,16 +2327,6 @@ mainInner.addEventListener('click',e=>{
 const overlay=document.getElementById('overlay');
 let editingId=null;
 
-function itemsToText(list){return (list||[]).map(it=>it.zh?(it.en+' ('+it.zh+')'):it.en).join('\n');}
-function parseItemLine(line){
-  const m=line.match(/^(.*?)[\(（]([^()（）]*)[\)）]\s*$/);
-  if(m)return {en:m[1].trim(),zh:m[2].trim()};
-  return {en:line.trim(),zh:''};
-}
-function textToItems(txt){
-  return txt.split('\n').map(l=>l.trim()).filter(Boolean).map(parseItemLine);
-}
-
 window.openEditor=function(id,presetGroup){
   editingId=id;
   const a=id?state.answers.find(x=>x.id===id):null;
@@ -2873,19 +2338,14 @@ window.openEditor=function(id,presetGroup){
   document.getElementById('groupList').innerHTML=allGroups().map(g=>'<option value="'+escAttr(g)+'">').join('');
   document.getElementById('fCue').value=a?(a.cueText||''):'';
   document.getElementById('fTrans').value=a?(a.transText||''):'';
-  document.getElementById('fIpa').value=a?(a.ipaText||''):'';
-  document.getElementById('fPatterns').value=a?itemsToText(a.patterns):'';
-  document.getElementById('fPhrases').value=a?itemsToText(a.phrases):'';
   document.getElementById('fFull').value=a?a.fullText:'';
-  document.getElementById('pasteBox').value='';
   editingDailyId=null;
   editType='card';
   document.getElementById('typeField').style.display=a?'none':''; // type is fixed after creation
   updateTypeUI();
   document.getElementById('deleteBtn').style.display=a?'inline-block':'none';
-  const q=document.querySelector('details.quick'); if(q)q.open=!id;
   overlay.classList.add('show');
-  setTimeout(()=>document.getElementById(id?'fCue':'pasteBox').focus(),40);
+  setTimeout(()=>document.getElementById('fCue').focus(),40);
 };
 function closeEditor(){overlay.classList.remove('show');editingId=null;editingDailyId=null;}
 function openDailyEditor(id){
@@ -2894,12 +2354,6 @@ function openDailyEditor(id){
   document.getElementById('modalTitle').textContent=e?'编辑日常用语':'新建日常用语';
   document.getElementById('fDailyText').value=e?(e.fullText||''):'';
   document.getElementById('fDailyZh').value=e?(e.zh||''):'';
-  document.getElementById('fCue').value=e?(e.cueText||''):'';
-  document.getElementById('fTrans').value=e?(e.transText||''):'';
-  document.getElementById('fIpa').value=e?(e.ipaText||''):'';
-  document.getElementById('fPatterns').value=e?itemsToText(e.patterns||[]):'';
-  document.getElementById('fPhrases').value=e?itemsToText(e.phrases||[]):'';
-  document.getElementById('pasteBox').value='';
   document.getElementById('typeField').style.display='none';
   document.getElementById('groupField').style.display='';
   document.getElementById('deleteBtn').style.display=e?'inline-block':'none';
@@ -2910,9 +2364,8 @@ function openDailyEditor(id){
 let editType='card',editingDailyId=null;
 function updateTypeUI(){
   const d=editType==='daily';
-  ['quickPaste','titleField','groupField','fullField'].forEach(id=>{document.getElementById(id).style.display=d?'none':'';});
+  ['titleField','groupField','fullField','cueField','transField'].forEach(id=>{document.getElementById(id).style.display=d?'none':'';});
   ['dailyTextField','dailyZhField'].forEach(id=>{document.getElementById(id).style.display=d?'':'none';});
-  // 句型/短语 fields are shared: required workflow for cards, optional for daily entries
   document.getElementById('typeCard').classList.toggle('on',!d);
   document.getElementById('typePhr').classList.toggle('on',d);
 }
@@ -2925,35 +2378,27 @@ document.getElementById('saveBtn').onclick=()=>{
   if(editingDailyId||(!editingId&&editType==='daily')){
     const ftxt=document.getElementById('fDailyText').value.replace(/\r\n/g,'\n').trim();
     const dzh=document.getElementById('fDailyZh').value.trim();
-    const dpat=textToItems(document.getElementById('fPatterns').value);
-    const dphr=textToItems(document.getElementById('fPhrases').value);
     if(!ftxt){closeEditor();return;}
-    const dtr=document.getElementById('fTrans').value.trim();
-    const dip=document.getElementById('fIpa').value.trim();
-    const dcue=document.getElementById('fCue').value.replace(/\r\n/g,'\n').trim();
     if(editingDailyId){
       const e=state.daily.find(x=>x.id===editingDailyId);
-      if(e){e.fullText=ftxt;e.zh=dzh;e.patterns=dpat;e.phrases=dphr;e.transText=dtr;e.ipaText=dip;e.cueText=dcue;}
+      if(e){e.fullText=ftxt;e.zh=dzh;}
     }else{
-      state.daily.push({id:uid(),fullText:ftxt,zh:dzh,patterns:dpat,phrases:dphr,transText:dtr,ipaText:dip,cueText:dcue,fav:false});
-      state.selectedId='__daily__';state.dailyOpen=null;
+      state.daily.push({id:uid(),fullText:ftxt,zh:dzh,fav:false});
+      state.selectedId='__daily__';
     }
     save();closeEditor();renderAll();
     return;
   }
-  const patterns=textToItems(document.getElementById('fPatterns').value);
-  const phrases=textToItems(document.getElementById('fPhrases').value);
   const fullText=document.getElementById('fFull').value.replace(/\r\n/g,'\n').trim();
   if(!title&&!fullText){closeEditor();return;}
   const transText=document.getElementById('fTrans').value.trim();
-  const ipaText=document.getElementById('fIpa').value.trim();
   const cueText=document.getElementById('fCue').value.replace(/\r\n/g,'\n').trim();
   if(editingId){
     const a=state.answers.find(x=>x.id===editingId);
-    a.title=title;a.group=group;a.patterns=patterns;a.phrases=phrases;a.fullText=fullText;
-    a.transText=transText;a.ipaText=ipaText;a.cueText=cueText;
+    a.title=title;a.group=group;a.fullText=fullText;
+    a.transText=transText;a.cueText=cueText;
   }else{
-    const na={id:uid(),title:title||'（未命名）',group,patterns,phrases,fullText,transText,ipaText,cueText};
+    const na={id:uid(),title:title||'（未命名）',group,fullText,transText,cueText};
     state.answers.push(na);state.selectedId=na.id;
   }
   if(group&&state.groups.indexOf(group)<0)state.groups.push(group);
@@ -2994,62 +2439,6 @@ function deleteAnswer(id,skipConfirm){
   save();renderAll();
 }
 
-// quick paste parser — order-agnostic, tolerant of markdown / numbering / labels
-function parsePasted(raw){
-  const lines=raw.replace(/\r\n/g,'\n').split('\n');
-  const strip=l=>l.replace(/^[\s>*#\-•·\d.、)]+/,'').replace(/\s+/g,'');
-  const KW={
-    pattern:['句型','句式','sentencepatterns','sentencepattern','patterns','pattern'],
-    phrase:['短语','词组','短句','phrases','phrase'],
-    full:['回答全文','全文回答','答案全文','完整回答','fullanswer','fulltext','回答','全文','answer']
-  };
-  const order=['pattern','phrase','full'];
-  function headerType(line){
-    const s=strip(line).toLowerCase();
-    if(!s)return null;
-    for(const t of order){
-      for(const k of KW[t]){
-        if(s.startsWith(k)){
-          const rest=s.slice(k.length).replace(/[()（）:：*]/g,'');
-          if(rest.length<=24)return t;
-        }
-      }
-    }
-    return null;
-  }
-  const marks=[];
-  lines.forEach((l,i)=>{const t=headerType(l);if(t)marks.push({i,type:t});});
-  const firstMark=marks.length?marks[0].i:lines.length;
-  let title='';
-  for(let i=0;i<firstMark;i++){
-    const l=lines[i];
-    const mm=l.match(/^\s*(?:问题|标题|题目|question)\s*[:：]\s*(.+)$/i);
-    if(mm){title=mm[1].trim();break;}
-    if(!title&&l.trim()){title=l.replace(/^[\s>*#\-•]+/,'').trim();break;}
-  }
-  const sec={pattern:[],phrase:[],full:[]};
-  for(let k=0;k<marks.length;k++){
-    const cur=marks[k],nextI=k+1<marks.length?marks[k+1].i:lines.length;
-    let body=lines.slice(cur.i+1,nextI);
-    const inline=lines[cur.i].match(/[:：]\s*(.+)$/);
-    if(inline)body=[inline[1]].concat(body);
-    if(cur.type==='full'){sec.full.push(body.join('\n'));}
-    else{body.forEach(l=>{const t=l.replace(/^[\s>*#\-•·]+/,'').replace(/^\d+[.)、]\s*/,'').trim();if(t)sec[cur.type].push(t);});}
-  }
-  return {title,patterns:sec.pattern,phrases:sec.phrase,full:sec.full.join('\n\n').replace(/^\s*[:：]\s*/,'').trim()};
-}
-function runParse(){
-  const raw=document.getElementById('pasteBox').value;
-  if(!raw.trim())return;
-  const r=parsePasted(raw);
-  if(r.title)document.getElementById('fTitle').value=r.title;
-  if(r.patterns.length)document.getElementById('fPatterns').value=r.patterns.join('\n');
-  if(r.phrases.length)document.getElementById('fPhrases').value=r.phrases.join('\n');
-  if(r.full)document.getElementById('fFull').value=r.full;
-}
-document.getElementById('parseBtn').onclick=runParse;
-document.getElementById('pasteBox').addEventListener('paste',()=>setTimeout(runParse,60));
-
 /* ============================================================
    Import / export
    ============================================================ */
@@ -3065,16 +2454,15 @@ document.getElementById('newFolderBtn').onclick=()=>newFolder();
    field set, so sentences, per-segment favourites, review counts, translations
    and IPA survive a round trip even when an entry never had one of them ---- */
 function packEntry(x){
-  return Object.assign({},x,{
-    patterns:Array.isArray(x.patterns)?x.patterns:[],
-    phrases:Array.isArray(x.phrases)?x.phrases:[],
+  const o=Object.assign({},x,{
     fullText:x.fullText||'',
     transText:x.transText||'',
-    ipaText:x.ipaText||'',
     cueText:x.cueText||'',
     sentFavs:Array.isArray(x.sentFavs)?x.sentFavs:[],
     reviews:Number(x.reviews)||0
   });
+  delete o.patterns;delete o.phrases;delete o.ipaText;
+  return o;
 }
 function packDaily(x){return Object.assign(packEntry(x),{zh:x.zh||'',fav:!!x.fav});}
 function normKey(s){return String(s||'').replace(/\s+/g,' ').trim().toLowerCase();}
@@ -3122,13 +2510,12 @@ document.getElementById('exportBtn').onclick=async()=>{
       if(vals[i]&&vals[i].size)audio.push({k:keys[i],d:await blobToB64(vals[i])});
     }
   }catch(e){}
-  // answers/daily array order IS the display order; groupOrder and study time ride along
-  const study=(typeof swData==='object'&&swData&&swData.days)?swData.days:{};
+  // answers/daily array order IS the display order; groupOrder rides along
   const blob=new Blob([JSON.stringify({
     v:2,appTitle:state.appTitle||DEF_TITLE,
     answers:state.answers.map(packEntry),daily:state.daily.map(packDaily),
     dailyPrefs:{pbMode:state.pbMode,pbShowZh:!!state.pbShowZh,pbFavOnly:!!state.pbFavOnly},
-    groupOrder:state.groupOrder,groups:state.groups,folders:state.folders,groupFolder:state.groupFolder,study,audio
+    groupOrder:state.groupOrder,groups:state.groups,folders:state.folders,groupFolder:state.groupFolder,audio
   })],{type:'application/json'});
   const url=URL.createObjectURL(blob);const a=document.createElement('a');
   const d=new Date();const stamp=d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0');
@@ -3150,8 +2537,8 @@ function exportBankLiteral(){
     });
     return o;
   };
-  const cards=state.answers.map(a=>keep(a,['id','title','group','cueText','fullText','transText','ipaText','patterns','phrases']));
-  const daily=state.daily.map(e=>keep(e,['id','zh','cueText','fullText','transText','ipaText','patterns','phrases','fav']));
+  const cards=state.answers.map(a=>keep(a,['id','title','group','cueText','fullText','transText']));
+  const daily=state.daily.map(e=>keep(e,['id','zh','cueText','fullText','transText','fav']));
   // 本地进度（复习次数、按段收藏）不进默认数据，它们是每台设备自己的
   const lay={title:state.appTitle||DEF_TITLE,groups:state.groups.slice(),
              folders:state.folders.slice(),groupFolder:Object.assign({},state.groupFolder)};
@@ -3169,15 +2556,13 @@ function exportHtmlText(){
   root.removeAttribute('data-theme');          // theme is a per-device choice
   root.removeAttribute('style');               // so is the font scale
   const body=q('body'); if(body)body.className='';
-  [['#mainInner',''],['#qlist',''],['#groupList',''],['#swList',''],['#padRows','']].forEach(([sel,v])=>{
+  [['#mainInner',''],['#qlist',''],['#groupList',''],['#padRows','']].forEach(([sel,v])=>{
     const el=q(sel); if(el)el.innerHTML=v;
   });
   ['#overlay','#ttsOverlay'].forEach(sel=>{const el=q(sel);if(el)el.classList.remove('show');});
-  const sw=q('#sw');
-  if(sw){sw.removeAttribute('style');sw.classList.add('collapsed');}
   const setTxt=(sel,v)=>{const el=q(sel);if(el)el.textContent=v;};
   setTxt('title',state.appTitle||DEF_TITLE);   // not whatever document.title happens to be
-  setTxt('#swTime','0:00');setTxt('#swToggle','开始');setTxt('#fsVal','100%');
+  setTxt('#fsVal','100%');
   setTxt('#pTime','0:00 / 0:00');setTxt('#pText','');setTxt('#cacheInfo','');setTxt('#padStatus','');
   const pl=q('#player'); if(pl)pl.setAttribute('hidden','');
   const seek=q('#pSeek'); if(seek)seek.setAttribute('value','0');
@@ -3260,16 +2645,6 @@ document.getElementById('importFile').onchange=e=>{
         const localOnly=(state.groupOrder||[]).filter(g=>d.groupOrder.indexOf(g)<0);
         state.groupOrder=append?d.groupOrder.concat(localOnly):d.groupOrder.slice();
       }else if(!append){state.groupOrder=[];}
-      // study time: same-date totals are overwritten, other dates kept
-      let days=0;
-      if(d&&d.study&&typeof d.study==='object'){
-        if(!append)swData.days={};
-        Object.keys(d.study).forEach(k=>{
-          const v=Number(d.study[k]);
-          if(isFinite(v)&&v>=0){swData.days[k]=v;days++;}
-        });
-        swSave();if(typeof swRender==='function')swRender();
-      }
       if(state.selectedId!=='__daily__'&&!state.answers.find(a=>a.id===state.selectedId))
         state.selectedId=state.answers[0]?state.answers[0].id:(state.daily.length?'__daily__':null);
       // restore bundled audio into the local cache
@@ -3282,7 +2657,6 @@ document.getElementById('importFile').onchange=e=>{
       save();renderAll();
       alert('导入完成：'+sumA+'；'+sumD
         +'；顺序已按备份恢复'
-        +(days?('；学习时长恢复 '+days+' 天'):'')
         +(clips?('；音频恢复 '+clips+' 条'):'')+'。');
     }catch(err){alert('导入失败：'+(err&&err.message||err));}
   };
@@ -3655,159 +3029,6 @@ $('ttsOverlay').addEventListener('mousedown',e=>{ttsPressBackdrop=(e.target===$(
 $('ttsOverlay').addEventListener('click',e=>{if(e.target===$('ttsOverlay')&&ttsPressBackdrop)closeTts();ttsPressBackdrop=false;});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&$('ttsOverlay').classList.contains('show'))closeTts();});
 
-
-/* ============================================================
-   Study stopwatch: per-day totals, history kept, never auto-runs
-   ============================================================ */
-const SW_KEY='study_time_v1';
-// pos is the panel's own top-left in viewport px; null means "default corner"
-let swData={days:{},collapsed:true,pos:null,v:2}, swRunning=false, swStart=0, swTick=null;
-function swToday(){
-  const d=new Date();
-  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-}
-function swLoad(){
-  let d=null;
-  try{const r=localStorage.getItem(SW_KEY);if(r)d=JSON.parse(r);}catch(e){}
-  if(!d||typeof d!=='object')return;
-  swData.days=d.days||{};
-  swData.pos=(d.pos&&isFinite(d.pos.x)&&isFinite(d.pos.y))?{x:+d.pos.x,y:+d.pos.y}:null;
-  // records written before v2 predate "collapsed by default": fold them in once,
-  // then keep respecting whatever the user last chose
-  swData.collapsed=(d.v>=2)?!!d.collapsed:true;
-  swData.v=2;
-  if(!(d.v>=2))swSave();
-}
-function swSave(){try{localStorage.setItem(SW_KEY,JSON.stringify(swData));}catch(e){}}
-function swBase(){return swData.days[swToday()]||0;}          // seconds banked today
-function swElapsed(){return swBase()+(swRunning?Math.floor((Date.now()-swStart)/1000):0);}
-function fmtHM(sec){
-  const h=Math.floor(sec/3600),m=Math.floor(sec%3600/60);
-  return h+':'+String(m).padStart(2,'0');
-}
-function swRender(){
-  const t=document.getElementById('swTime');
-  t.textContent=fmtHM(swElapsed());
-  t.classList.toggle('running',swRunning);
-  document.getElementById('swToggle').textContent=swRunning?'暂停':'开始';
-  document.getElementById('sw').classList.toggle('collapsed',!!swData.collapsed);
-  swApplyPos();
-}
-// keep the panel where it was dropped, and always fully inside the viewport
-function swApplyPos(){
-  const el=document.getElementById('sw');
-  if(!swData.pos){el.style.left='';el.style.top='';el.style.right='';return;}
-  el.style.right='auto';
-  el.style.left=swData.pos.x+'px';
-  el.style.top=swData.pos.y+'px';
-  const r=el.getBoundingClientRect(),m=4;
-  const x=Math.min(Math.max(swData.pos.x,m),Math.max(m,window.innerWidth-r.width-m));
-  const y=Math.min(Math.max(swData.pos.y,m),Math.max(m,window.innerHeight-r.height-m));
-  if(x!==swData.pos.x||y!==swData.pos.y){
-    swData.pos={x:x,y:y};
-    el.style.left=x+'px';el.style.top=y+'px';
-  }
-}
-function swBank(){
-  if(!swRunning)return;
-  const add=Math.floor((Date.now()-swStart)/1000);
-  swData.days[swToday()]=(swData.days[swToday()]||0)+add;
-  swStart=Date.now();
-  swSave();
-}
-function swStartRun(){
-  if(swRunning)return;
-  swRunning=true;swStart=Date.now();
-  swTick=setInterval(()=>{swBank();swRender();},15000);   // bank periodically so a crash loses little
-  swRender();
-}
-function swStop(){
-  if(!swRunning)return;
-  swBank();swRunning=false;
-  if(swTick){clearInterval(swTick);swTick=null;}
-  swRender();
-}
-function swRenderHist(){
-  const box=document.getElementById('swList');
-  const keys=Object.keys(swData.days).filter(k=>swData.days[k]>0).sort().reverse().slice(0,30);
-  box.innerHTML=keys.length
-    ? keys.map(k=>'<div class="sw-row"><span>'+k.slice(5)+'</span><b>'+fmtHM(k===swToday()?swElapsed():swData.days[k])+'</b></div>').join('')
-    : '<div class="sw-row">还没有记录</div>';
-}
-document.getElementById('swToggle').onclick=function(){swRunning?swStop():swStartRun();this.blur();};
-document.getElementById('swReset').onclick=()=>{
-  if(!confirm('把今天的学习时长清零？（历史其他日期保留）'))return;
-  swStop();swData.days[swToday()]=0;swSave();swRender();
-  if(!document.getElementById('swList').hidden)swRenderHist();
-};
-document.getElementById('swHist').onclick=function(){
-  const box=document.getElementById('swList');
-  box.hidden=!box.hidden;
-  if(!box.hidden)swRenderHist();
-  this.blur();
-};
-document.getElementById('swHide').onclick=()=>{swData.collapsed=true;swSave();swRender();};
-document.getElementById('swTab').onclick=()=>{swData.collapsed=false;swSave();swRender();};
-// dblclick on the clock puts the panel back in its default corner
-document.getElementById('swTime').addEventListener('dblclick',()=>{swData.pos=null;swSave();swApplyPos();});
-/* ---- move the panel: pointer events, so touch works like mouse ----
-   the clock face and the panel padding drag straight away, the collapsed
-   tab needs a long press on touch so a plain tap still expands it */
-(function(){
-  const el=document.getElementById('sw');
-  el.addEventListener('pointerdown',ev=>{
-    if(ev.button!==undefined&&ev.button!==0)return;
-    const t=ev.target;
-    if(t.closest&&t.closest('.sw-list'))return;
-    const onTab=!!(t.closest&&t.closest('#swTab'));
-    if(!onTab&&t.closest&&t.closest('button,input,select,textarea,a'))return;
-    const touch=ev.pointerType==='touch'||ev.pointerType==='pen';
-    const r=el.getBoundingClientRect();
-    const ox=r.left,oy=r.top,x0=ev.clientX,y0=ev.clientY;
-    let dragging=false,armed=!(touch&&onTab),timer=null;
-    if(!onTab)ev.preventDefault();
-    if(touch&&onTab)timer=setTimeout(()=>{armed=true;timer=null;},320);
-    const onMove=e=>{
-      const dx=Math.abs(e.clientX-x0),dy=Math.abs(e.clientY-y0);
-      if(!dragging){
-        if(!armed){if(dx>8||dy>8){cleanup();}return;}
-        if(dx<5&&dy<5)return;
-        dragging=true;el.classList.add('sw-drag');
-        try{el.setPointerCapture(ev.pointerId);}catch(_){}
-      }
-      e.preventDefault();
-      swData.pos={x:ox+(e.clientX-x0),y:oy+(e.clientY-y0)};
-      swApplyPos();
-    };
-    const onUp=()=>{
-      const was=dragging;
-      cleanup();
-      if(was){
-        swSave();
-        // a drag must not also register as a tap on the tab
-        document.addEventListener('click',k=>{k.stopPropagation();k.preventDefault();},{capture:true,once:true});
-      }
-    };
-    function cleanup(){
-      if(timer){clearTimeout(timer);timer=null;}
-      document.removeEventListener('pointermove',onMove,true);
-      document.removeEventListener('pointerup',onUp,true);
-      document.removeEventListener('pointercancel',onUp,true);
-      el.classList.remove('sw-drag');
-      dragging=false;
-    }
-    document.addEventListener('pointermove',onMove,{capture:true,passive:false});
-    document.addEventListener('pointerup',onUp,true);
-    document.addEventListener('pointercancel',onUp,true);
-  });
-  window.addEventListener('resize',()=>swApplyPos());
-})();
-// second-level UI refresh while running
-setInterval(()=>{if(swRunning){swRender();const b=document.getElementById('swList');if(b&&!b.hidden)swRenderHist();}},1000);
-// never keep counting across a reload: bank on the way out
-window.addEventListener('beforeunload',()=>{swBank();});
-document.addEventListener('visibilitychange',()=>{if(document.hidden)swBank();});
-swLoad();swRender();
 
 /* ============================================================
    Boot
