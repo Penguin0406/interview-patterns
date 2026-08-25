@@ -631,12 +631,12 @@
       </div>
       <div class="field" id="cueField">
         <label>关键词提示</label>
-        <div class="desc">全文界面会把它放在正文上方，用来看着关键词回忆内容。怎么写都行，换行会保留。</div>
+        <div class="desc">全文界面会把它放在正文上方，用来看着关键词回忆内容。怎么写都行，换行会保留。选中文字按 Ctrl/⌘+B 可加粗。</div>
         <textarea class="f" id="fCue" rows="10" placeholder="niche SaaS → GTM → outbound → data"></textarea>
       </div>
       <div class="field" id="fullField">
         <label>回答全文</label>
-        <div class="desc">段落之间空一行。想手动切分发音段，在切点处打一个前后带空格的 " / "（显示时自动隐藏，只影响朗读分段）。</div>
+        <div class="desc">段落之间空一行。想手动切分发音段，在切点处打一个前后带空格的 " / "（显示时自动隐藏，只影响朗读分段）。选中文字按 Ctrl/⌘+B 可加粗。</div>
         <textarea class="f" id="fFull" rows="8" placeholder="粘贴完整回答。段落之间空一行即可。"></textarea>
       </div>
       <div class="field" id="dailyTextField" style="display:none">
@@ -1113,6 +1113,53 @@ function save(){
 function escHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function escAttr(s){return escHtml(s).replace(/"/g,'&quot;');}
 function spacesToHtml(s){return escHtml(s).replace(/\n/g,'<br>');}
+// ---- 加粗（Markdown 式 **粗体**）----
+function stripBold(s){return String(s==null?'':s).split('**').join('');}
+function boldWhole(raw){
+  const esc=spacesToHtml(String(raw==null?'':raw));
+  let out='',open=false,j=0;
+  while(j<esc.length){
+    if(esc[j]==='*'&&esc[j+1]==='*'){
+      if(!open){ if(esc.indexOf('**',j+2)>=0){out+='<strong>';open=true;} else {out+='**';} }
+      else{ out+='</strong>';open=false; }
+      j+=2;continue;
+    }
+    out+=esc[j];j++;
+  }
+  if(open)out+='</strong>';
+  return out;
+}
+function boldSlice(text,gs,ge,bolds){
+  if(!bolds||!bolds.length)return spacesToHtml(text.slice(gs,ge));
+  let html='',pos=gs;
+  for(const r of bolds){
+    const s=Math.max(r[0],gs),e=Math.min(r[1],ge);
+    if(e<=s)continue;
+    if(s>pos)html+=spacesToHtml(text.slice(pos,s));
+    html+='<strong>'+spacesToHtml(text.slice(s,e))+'</strong>';
+    pos=e;
+  }
+  if(pos<ge)html+=spacesToHtml(text.slice(pos,ge));
+  return html;
+}
+function bindBold(ta){
+  if(!ta||ta.__boldBound)return;ta.__boldBound=true;
+  ta.addEventListener('keydown',function(e){
+    if(!(e.ctrlKey||e.metaKey)||e.altKey)return;
+    if(e.key!=='b'&&e.key!=='B')return;
+    e.preventDefault();
+    const v=ta.value,s=ta.selectionStart,en=ta.selectionEnd;
+    const before=v.slice(0,s),sel=v.slice(s,en),after=v.slice(en);
+    if(sel.length>=4&&sel.slice(0,2)==='**'&&sel.slice(-2)==='**'){
+      const inner=sel.slice(2,-2);
+      ta.value=before+inner+after;ta.selectionStart=s;ta.selectionEnd=s+inner.length;
+    }else if(before.slice(-2)==='**'&&after.slice(0,2)==='**'){
+      ta.value=before.slice(0,-2)+sel+after.slice(2);ta.selectionStart=s-2;ta.selectionEnd=en-2;
+    }else{
+      ta.value=before+'**'+sel+'**'+after;ta.selectionStart=s+2;ta.selectionEnd=en+2;
+    }
+  });
+}
 
 function segKey(t){return (t||'').replace(/\s+/g,' ').trim();}
 function alignTrans(text,transText){
@@ -1143,7 +1190,8 @@ function alignTrans(text,transText){
   }
   return map;
 }
-function renderFull(text,cuts,fav,trans){
+function renderFull(text,cuts,fav,trans,bolds){
+  bolds=bolds||[];
   const segs=ttsSegments(text,cuts);
   const sents=sentenceSpans(text);
   const paras=[];{
@@ -1164,7 +1212,7 @@ function renderFull(text,cuts,fav,trans){
       for(const g of mySegs){
         const gs=Math.max(g.start,ps),ge=Math.min(g.end,pe);
         if(ge<=gs)continue;
-        let segHtml=spacesToHtml(text.slice(gs,ge));
+        let segHtml=boldSlice(text,gs,ge,bolds);
         const stext=text.slice(g.start,g.end).trim();
         const hasWords=stext.replace(/[^A-Za-z\u00C0-\u017F]/g,'').length>1;
         if(hasWords){
@@ -1193,9 +1241,14 @@ function parseCuts(raw){
   // " / " in the stored text is a manual cut marker: hidden from display,
   // it forces a TTS segment boundary. A slash needs whitespace on at least
   // one side to count, so 24/7, et/ou and URLs stay untouched.
-  const cuts=[];let out='';let i=0;
+  const cuts=[];const bolds=[];let out='';let i=0;let bStart=-1;
   while(i<raw.length){
     const ch=raw[i];
+    if(ch==='*'&&raw[i+1]==='*'){
+      if(bStart<0)bStart=out.length;
+      else{if(out.length>bStart)bolds.push([bStart,out.length]);bStart=-1;}
+      i+=2;continue;
+    }
     const prev=i>0?raw[i-1]:'';
     const next=i+1<raw.length?raw[i+1]:'';
     if(ch==='/'&&((/\s/.test(prev)||prev==='')||(/\s/.test(next)||next===''))){
@@ -1207,7 +1260,7 @@ function parseCuts(raw){
       i=j;
     }else{out+=ch;i++;}
   }
-  return {text:out,cuts:[...new Set(cuts)].filter(c=>c>0&&c<out.length)};
+  return {text:out,cuts:[...new Set(cuts)].filter(c=>c>0&&c<out.length),bolds};
 }
 function sentenceSpans(text){
   // sentence ends at . ! ? (plus closing quotes/brackets) followed by whitespace or EOL;
@@ -2151,13 +2204,13 @@ function renderQuiz(){
         +(rev?'<button class="linkbtn" id="qRevExit">退出复习，回到第 '+quizRound()+' 轮</button>':'')
         +'</div>';
       if(st>=1&&hasCue)
-        body+='<div class="cuebox"><span class="cue-lab">关键词</span>'+spacesToHtml(cur.cueText.trim())+'</div>';
+        body+='<div class="cuebox"><span class="cue-lab">关键词</span>'+boldWhole(cur.cueText.trim())+'</div>';
       if(st>=2&&hasFull){
         const parsed=parseCuts(cur.fullText||'');
         // 只看收藏：整段挖空练习卡里只留下按段收藏的句子，其余隐去
         body+='<div class="card" id="practiceCard">'
           +renderFull(parsed.text,parsed.cuts,{set:new Set(cur.sentFavs||[]),only:(favOnly&&hasFavSent)},
-                      alignTrans(parsed.text,cur.transText||''))
+                      alignTrans(parsed.text,cur.transText||''),parsed.bolds)
           +'</div>';
       }
     }else{
@@ -2280,9 +2333,9 @@ function renderCardView(a){
   const parsed=parseCuts(a.fullText||''); // markers hidden from display and matching
   const favInfo={set:new Set(a.sentFavs||[]),only:!!state.favOnlySent};
   const transMap=alignTrans(parsed.text,a.transText||'');
-  let bodyHtml=renderFull(parsed.text,parsed.cuts,favInfo,transMap);
+  let bodyHtml=renderFull(parsed.text,parsed.cuts,favInfo,transMap,parsed.bolds);
   const cue=(a.cueText||'').trim();
-  if(cue)bodyHtml='<div class="cuebox"><span class="cue-lab">\u5173\u952e\u8bcd</span>'+spacesToHtml(cue)+'</div>'+bodyHtml;
+  if(cue)bodyHtml='<div class="cuebox"><span class="cue-lab">\u5173\u952e\u8bcd</span>'+boldWhole(cue)+'</div>'+bodyHtml;
   mainInner.innerHTML=
     (groupOf(a)!==UNGROUPED?'<div class="brand-sub" style="margin-bottom:6px;">'+escHtml(groupOf(a))+'</div>':'')+
     '<h1 class="ans-title">'+escHtml(a.title||'\uff08\u672a\u547d\u540d\uff09')+'</h1>'+
@@ -2385,6 +2438,7 @@ function updateTypeUI(){
   document.getElementById('typePhr').classList.toggle('on',d);
 }
 document.getElementById('typeCard').onclick=()=>{editType='card';updateTypeUI();};
+['fCue','fFull','fRe'].forEach(id=>bindBold(document.getElementById(id)));
 document.getElementById('typePhr').onclick=()=>{editType='daily';updateTypeUI();};
 
 document.getElementById('saveBtn').onclick=()=>{
