@@ -1387,20 +1387,35 @@ function newGroup(folder){
   save();renderSidebar();
 }
 function renameGroup(gname){
-  const nn=prompt('重命名分组「'+gname+'」\n（清空后确定 = 删除分组，卡片移入「'+UNGROUPED+'」）',gname);
+  const nn=prompt('重命名分组「'+gname+'」\n（清空后确定 = 删除分组及其下所有卡片）',gname);
   if(nn===null)return;
   const newName=nn.trim();
   if(newName&&newName!==gname&&state.groups.indexOf(newName)>=0){alert('已有同名分组。');return;}
+  if(!newName){
+    // 删除分组：连同组内所有卡片一起删除（不再移入未分组）
+    const victims=state.answers.filter(a=>groupOf(a)===gname);
+    if(!confirm('删除分组「'+gname+'」及其下的 '+victims.length+' 张卡片？\n此操作无法撤销。'))return;
+    const ids=new Set(victims.map(a=>a.id));
+    // 删掉的内置卡片要记进 builtinGone，否则下次加载会被重新种回来
+    victims.forEach(a=>{if(BUILTIN_IDS.has(a.id)&&state.builtinGone.indexOf(a.id)<0)state.builtinGone.push(a.id);});
+    state.answers=state.answers.filter(a=>!ids.has(a.id));
+    const gi=state.groups.indexOf(gname);
+    if(gi>=0)state.groups.splice(gi,1);
+    delete state.groupFolder[gname];
+    if(state.openGroup===gname)state.openGroup=null;
+    if(ids.has(state.selectedId))
+      state.selectedId=state.answers[0]?state.answers[0].id:(state.daily.length?'__daily__':null);
+    syncGroups();save();renderAll();
+    return;
+  }
   state.answers.forEach(a=>{if(groupOf(a)===gname)a.group=newName;});
   const i=state.groups.indexOf(gname);
   if(i>=0){
-    if(newName){
-      state.groups[i]=newName;
-      if(state.groupFolder[gname]){state.groupFolder[newName]=state.groupFolder[gname];}
-    }else state.groups.splice(i,1);
+    state.groups[i]=newName;
+    if(state.groupFolder[gname]){state.groupFolder[newName]=state.groupFolder[gname];}
     delete state.groupFolder[gname];
   }
-  if(state.openGroup===gname)state.openGroup=newName||null;
+  if(state.openGroup===gname)state.openGroup=newName;
   syncGroups();save();renderAll();
 }
 function renameFolder(fname){
