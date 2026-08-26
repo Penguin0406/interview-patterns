@@ -228,6 +228,9 @@
   body.quiz-mode .side-tools,body.quiz-mode .qlist,body.quiz-mode .side-search{display:none;}
   body.quiz-mode #listToggle{display:none;}
   .quiz-scope{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:18px;}
+  .quiz-scope.collapsed{margin-bottom:14px;}
+  .qscope-toggle{border:1px solid var(--line-strong);background:var(--well);color:var(--muted);border-radius:999px;padding:7px 14px;font-size:calc(12.5px * var(--fs));cursor:pointer;white-space:nowrap;font-family:var(--sans);}
+  .qscope-toggle:hover{color:var(--ink);border-color:var(--muted);}
   .quiz-scope .chip{border:1px solid var(--line-strong);background:var(--card);color:var(--muted);
     border-radius:20px;padding:5px 13px;font-family:var(--sans);font-size:calc(12.5px * var(--fs));
     line-height:1.3;cursor:pointer;transition:all .14s;}
@@ -2187,6 +2190,7 @@ function setQuizSize(n){
   if(quizDone().length===b.start)b.size=quizSize();
   save();renderMain();
 }
+let quizScopeOpen=false;
 function renderQuiz(){
   quizPrune();
   const pool=quizPool();
@@ -2311,9 +2315,16 @@ function renderQuiz(){
       }
     }
   }
-  mainInner.innerHTML='<div class="quiz-scope">'+chips+(pool.length?bsz+revBox:'')+'</div>'
+  // 题库选择框默认折叠，只显示当前范围的小摘要，点一下展开完整的分组 / 每批 / 复习控制
+  const scopeName=rev?('复习'+rev.label):(isD?'日常用语':(isF?'★ 收藏':(sc.length?(sc.length<=2?sc.join('、'):sc.length+' 个分组'):'全部')));
+  const scopeSum=scopeName+' · '+(size?('每批 '+size):'每批 全部');
+  const scopeInner=quizScopeOpen
+    ? chips+(pool.length?bsz+revBox:'')+'<button class="qscope-toggle" id="qScopeToggle" aria-expanded="true" title="收起题库选择">收起 ▲</button>'
+    : '<button class="qscope-toggle" id="qScopeToggle" aria-expanded="false" title="展开题库选择">'+escHtml(scopeSum)+' ▾</button>';
+  mainInner.innerHTML='<div class="quiz-scope'+(quizScopeOpen?'':' collapsed')+'">'+scopeInner+'</div>'
     +'<div class="quiz-meta">'+escHtml(meta)+'</div>'+qHtml
     +'<div class="quiz-acts">'+acts+'</div>'+body;
+  { const qst=document.getElementById('qScopeToggle'); if(qst)qst.onclick=()=>{quizScopeOpen=!quizScopeOpen;renderMain();}; }
   mainInner.querySelectorAll('.quiz-scope .chip').forEach(b=>{
     b.onclick=()=>{
       const g=b.dataset.g;
@@ -3216,6 +3227,7 @@ document.getElementById('listToggle').onclick=function(){
 };
 document.getElementById('viewToggle').onclick=()=>{
   state.view=state.view==='quiz'?'edit':'quiz';
+  if(state.view==='quiz')closeDrawer();   // 切到抽背时把卡片库的列表抽屉收起
   renderAll();
 };
 load();applyTitle();renderAll();
