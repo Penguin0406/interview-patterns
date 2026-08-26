@@ -2253,9 +2253,16 @@ function renderQuiz(){
   }else{
     meta=rev?('复习'+rev.label):('第 '+quizRound()+' 轮');
     // 复习一批时，它本身就是一批，再报一遍批次是重复的
-    if(size&&!(rev&&target>=pool.length))
-      meta+=' · 第 '+(b.no||1)+' 批 '+Math.min(at-b.start+(cur?1:0),inB)+' / '+target;
-    meta+=' · '+(rev?'已过 ':'本轮 ')+doneN+' / '+pool.length;
+    if(cur){
+      // 显示这一张在当前批次里排第几，而不是"已过"多少张——后者在往回翻的时候会
+      // 一直停在曾经到过的最大进度上，和眼前这张对不上号
+      if(size&&!(rev&&target>=pool.length))meta+=' · 第 '+(b.no||1)+' 批';
+      meta+=' · 第 '+(at-b.start+1)+' / '+target+' 张';
+    }else{
+      if(size&&!(rev&&target>=pool.length))
+        meta+=' · 第 '+(b.no||1)+' 批 '+inB+' / '+target;
+      meta+=' · '+(rev?'已过 ':'本轮 ')+doneN+' / '+pool.length;
+    }
     if(cur){
       const hasCue=!!String(cur.cueText||'').trim();
       const hasFull=!!String(cur.fullText||'').trim();
@@ -2263,11 +2270,11 @@ function renderQuiz(){
       const st=state.quiz.stage;
       const favOnly=!!state.quiz.favSent;
       qHtml='<h1 class="quiz-q">'+escHtml(quizAsk(cur))+'</h1>';
-      const cueOff=(st>=1||!hasCue)?' disabled':'';
-      // 回答全文 / 只看收藏 是同一层的两种展开：都要求先过关键词（若有），
-      // 展开后两个按钮互为切换（当前在哪个，哪个就置灰）
-      const fullOff=(!hasFull||(st<1&&hasCue)||(st>=2&&!favOnly))?' disabled':'';
-      const favSentOff=(!hasFull||!hasFavSent||(st<1&&hasCue)||(st>=2&&favOnly))?' disabled':'';
+      const cueOff=(!hasCue)?' disabled':'';
+      // 回答全文 / 只看收藏 是同一层的两种展开：都要求先过关键词（若有）。
+      // 展开后再点同一个按钮会收起；点另一个则切换到那个展开方式。
+      const fullOff=(!hasFull||(st<1&&hasCue))?' disabled':'';
+      const favSentOff=(!hasFull||!hasFavSent||(st<1&&hasCue))?' disabled':'';
       acts='<button class="btn" id="qPrev"'+(at>b.start?'':' disabled')+'>上一题</button>'
         +'<button class="btn" id="qCue"'+cueOff+'>关键词</button>'
         +'<button class="btn" id="qFull"'+fullOff+'>回答全文</button>'
@@ -2364,9 +2371,30 @@ function renderQuiz(){
   });
   on('qFav',()=>{if(!cur)return;cur.fav=!cur.fav;save();renderMain();});
   on('qFavRev',quizStartFavReview);
-  on('qCue',()=>{state.quiz.stage=1;state.quiz.favSent=false;save();renderMain();});
-  on('qFull',()=>{state.quiz.stage=2;state.quiz.favSent=false;save();renderMain();});
-  on('qFavSent',()=>{state.quiz.stage=2;state.quiz.favSent=true;save();renderMain();});
+  on('qCue',()=>{
+    // 展开了再点一下就收起，回到只看题目
+    state.quiz.stage=(state.quiz.stage>=1)?0:1;
+    state.quiz.favSent=false;
+    save();renderMain();
+  });
+  on('qFull',()=>{
+    if(state.quiz.stage>=2&&!state.quiz.favSent){
+      const hasCue=!!(cur&&String(cur.cueText||'').trim());
+      state.quiz.stage=hasCue?1:0;
+    }else{
+      state.quiz.stage=2;state.quiz.favSent=false;
+    }
+    save();renderMain();
+  });
+  on('qFavSent',()=>{
+    if(state.quiz.stage>=2&&state.quiz.favSent){
+      const hasCue=!!(cur&&String(cur.cueText||'').trim());
+      state.quiz.stage=hasCue?1:0;
+    }else{
+      state.quiz.stage=2;state.quiz.favSent=true;
+    }
+    save();renderMain();
+  });
   on('qNext',quizNext);
   on('qPrev',quizPrev);
   on('qStart',quizDraw);
