@@ -973,12 +973,28 @@ function quizForBank(){
   try{return JSON.parse(JSON.stringify(state.quiz||blankQuiz()));}catch(e){return blankQuiz();}
 }
 // 只在本机毫无进度时采用内置进度，避免覆盖设备上正在进行的抽背
-function seedQuiz(){
-  // BUILTIN_STAMP 是导出那一刻打上的版本号。只有当遇到「比本机已应用的更新的一份
-  // 内置数据」时，才采用它烘焙进来的抽背进度；否则（普通刷新、打开旧文件）保持本机进度不动。
+// 更新「已经存在的内置卡片」的内容字段，让较新的一份导出为准。
+// 新增卡片仍由 seedBuiltins 负责；被删掉的卡片(builtinGone)不动；
+// 只覆盖内容，本地的按段收藏 / 复习次数等学习状态保留。
+function refreshBuiltinContent(){
+  const gone=new Set(state.builtinGone||[]);
+  const byId=new Map(state.answers.map(a=>[a.id,a]));
+  const FIELDS=['title','group','cueText','fullText','transText','reText'];
+  BUILTIN_CARDS.forEach(b=>{
+    if(!b||!b.id||gone.has(b.id))return;
+    const cur=byId.get(b.id);
+    if(!cur)return;                 // 新卡由 seedBuiltins 处理
+    FIELDS.forEach(f=>{ if(f in b) cur[f]=b[f]; });
+  });
+}
+// BUILTIN_STAMP 是导出那一刻打上的版本号。只有当遇到「比本机已应用的更新的一份内置数据」时，
+// 才把它烘焙进来的卡片内容和抽背进度应用过来；普通刷新、打开旧文件都保持本机不动。
+// 导出时本机会把自己的 appliedBankStamp 抬到该版本，所以主设备打开自己导出的文件不会被旧快照覆盖。
+function applyNewerBank(){
   const stamp=(typeof BUILTIN_STAMP==='number')?BUILTIN_STAMP:0;
   if(!(stamp>(state.appliedBankStamp||0)))return false;
   state.appliedBankStamp=stamp;
+  refreshBuiltinContent();
   if(BUILTIN_QUIZ&&typeof BUILTIN_QUIZ==='object'){
     const nq=normalizeQuiz(JSON.parse(JSON.stringify(BUILTIN_QUIZ)));
     if(quizHasProgress(nq)||(nq.scope&&nq.scope.length))state.quiz=nq;
@@ -1153,7 +1169,7 @@ function load(){
   }
   // seed before the selection fix below, or a fresh install with a bank but no
   // saved data would end up with cards and nothing selected
-  if(seedBuiltins()|regroupBuiltins()|(seedQuiz()?1:0)|(didStrip?1:0))save();
+  if(seedBuiltins()|regroupBuiltins()|(applyNewerBank()?1:0)|(didStrip?1:0))save();
   syncGroups();
   if(state.selectedId!=='__daily__'&&(!state.selectedId||!state.answers.find(a=>a.id===state.selectedId)))
     state.selectedId=state.answers[0]?state.answers[0].id:(state.daily.length?'__daily__':null);
