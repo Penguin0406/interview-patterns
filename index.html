@@ -518,7 +518,8 @@
       <button class="btn primary" id="newGroupBtn">+ 分组</button>
       <button class="btn ghost" id="newFolderBtn">+ 文件夹</button>
       <button class="btn ghost" id="importBtn">导入</button>
-      <button class="btn ghost" id="exportBtn">导出</button>
+      <button class="btn ghost" id="exportBtn" title="完整备份：全部卡片、日常用语、音频缓存和抽背进度，JSON 格式">导出数据</button>
+      <button class="btn ghost" id="exportTextBtn" title="只导出卡片和日常用语的文字内容，不含音频、进度，Markdown 格式，方便阅读或分享">导出文本</button>
       <button class="btn ghost" id="exportHtmlBtn" title="导出一份把当前内容写死为默认数据的 HTML">导出 HTML</button>
       <input type="file" id="importFile" accept="application/json" hidden>
     </div>
@@ -1339,6 +1340,26 @@ function parseCuts(raw){
     }else{out+=ch;i++;}
   }
   return {text:out,cuts:[...new Set(cuts)].filter(c=>c>0&&c<out.length),bolds};
+}
+// same " / " stripping as parseCuts, but leaves "**" alone: the plain-text /
+// markdown export wants the manual cut markers gone while keeping **bold**,
+// since that already IS markdown bold syntax
+function stripCutsOnly(raw){
+  raw=String(raw==null?'':raw);
+  let out='',i=0;
+  while(i<raw.length){
+    const ch=raw[i];
+    const prev=i>0?raw[i-1]:'';
+    const next=i+1<raw.length?raw[i+1]:'';
+    if(ch==='/'&&((/\s/.test(prev)||prev==='')||(/\s/.test(next)||next===''))){
+      while(out.length&&out[out.length-1]===' ')out=out.slice(0,-1);
+      let j=i+1;
+      while(j<raw.length&&(raw[j]==='/'||raw[j]===' '))j++;
+      if(out.length&&j<raw.length&&raw[j]!=='\n')out+=' ';
+      i=j;
+    }else{out+=ch;i++;}
+  }
+  return out;
 }
 function sentenceSpans(text){
   // sentence ends at . ! ? (plus closing quotes/brackets) followed by whitespace or EOL;
@@ -2702,6 +2723,59 @@ document.getElementById('exportBtn').onclick=async()=>{
   const url=URL.createObjectURL(blob);const a=document.createElement('a');
   const d=new Date();const stamp=d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0');
   a.href=url;a.download=(state.appTitle||DEF_TITLE)+'-备份-'+stamp+'.json';a.click();URL.revokeObjectURL(url);
+};
+/* ---- 导出文本（Markdown）--------------------------------------------------
+   只要文字：卡片标题、关键词提示、正文、翻译，日常用语的原文+中文。不含音频、
+   收藏、复习次数、抽背进度这些运行时状态，方便直接阅读或分享给别人看内容。
+   正文里已有的 **粗体** 本来就是 Markdown 语法，原样保留；只去掉自定义的
+   " / " 断句标记。 */
+function mdCard(a,depth){
+  const h='#'.repeat(depth);
+  const lines=[h+' '+(a.title||'（未命名）'),''];
+  const cue=(a.cueText||'').trim();
+  if(cue){lines.push('**关键词提示**',...['',cue,'']);}
+  const full=stripCutsOnly(a.fullText||'').trim();
+  if(full)lines.push(full,'');
+  const re=(a.reText||'').trim();     // 法语版「翻译+原文」卡片专用字段，英语版恒为空
+  if(re)lines.push('**翻译+原文**','',stripCutsOnly(re).trim(),'');
+  const trans=(a.transText||'').trim();
+  if(trans)lines.push('**翻译**','',trans,'');
+  return lines;
+}
+function buildMarkdownExport(){
+  const lines=['# '+(state.appTitle||DEF_TITLE),''];
+  const groupBlock=(g,depth)=>{
+    const list=cardsOf(g);
+    if(!list.length)return;
+    lines.push('#'.repeat(depth)+' '+g,'');
+    list.forEach(a=>lines.push(...mdCard(a,depth+1)));
+  };
+  state.folders.forEach(f=>{
+    const gs=groupsInFolder(f).filter(g=>cardsOf(g).length);
+    if(!gs.length)return;
+    lines.push('## '+f,'');
+    gs.forEach(g=>groupBlock(g,3));
+  });
+  topLevelGroups().forEach(g=>groupBlock(g,2));
+  if(state.answers.some(a=>groupOf(a)===UNGROUPED))groupBlock(UNGROUPED,2);
+  if(state.daily.length){
+    lines.push('## '+'日常用语','');
+    state.daily.forEach(e=>{
+      const t=stripCutsOnly(e.fullText||'').trim();
+      if(!t)return;
+      const zh=(e.zh||'').trim();
+      lines.push('- '+t+(zh?'　'+zh:''));
+    });
+    lines.push('');
+  }
+  return lines.join('\n');
+}
+document.getElementById('exportTextBtn').onclick=()=>{
+  const blob=new Blob([buildMarkdownExport()],{type:'text/markdown'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  const d=new Date();const stamp=d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0');
+  a.href=url;a.download=(state.appTitle||DEF_TITLE)+'-文本-'+stamp+'.md';a.click();URL.revokeObjectURL(url);
 };
 /* ---- 导出 HTML ----------------------------------------------------------
    页面读不到自己在磁盘上的文件，所以把当前 DOM 序列化回一份 HTML：
